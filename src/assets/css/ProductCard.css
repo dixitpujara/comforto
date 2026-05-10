@@ -1,0 +1,146 @@
+.pcard {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-border-soft);
+  display: flex;
+  flex-direction: column;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+.pcard::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: 2px;
+  background: var(--color-accent);
+  transition: width var(--transition-normal);
+  z-index: 3;
+}
+.pcard:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-border);
+}
+.pcard:hover::after { width: 100%; }
+
+.pcard-image-wrap {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--color-bg-alt);
+  overflow: hidden;
+  display: block;
+}
+.pcard-image-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s ease;
+}
+.pcard:hover .pcard-image-wrap img { transform: scale(1.05); }
+
+/* Subtle gradient on image bottom for hover icons readability */
+.pcard-image-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 60%, rgba(15, 12, 8, 0.18) 100%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  pointer-events: none;
+}
+.pcard:hover .pcard-image-wrap::after { opacity: 1; }
+
+.pcard-tag {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+}
+
+.pcard-hover-actions {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  opacity: 1;
+  transform: translateY(0);
+  transition: all var(--transition-fast);
+  z-index: 2;
+}
+
+.pcard-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+.pcard-icon:hover {
+  background: var(--color-text-primary);
+  color: var(--color-accent);
+  border-color: var(--color-text-primary);
+}
+.pcard-icon.active {
+  background: var(--color-text-primary);
+  color: var(--color-accent);
+  border-color: var(--color-text-primary);
+}
+
+.pcard-meta {
+  padding: 1.05rem 1.15rem 1.25rem;
+  position: relative;
+}
+.pcard-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.pcard-name {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: 0.2rem;
+  letter-spacing: 0.005em;
+}
+.pcard-price {
+  font-size: 0.92rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pcard-subtitle {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.7rem;
+  letter-spacing: 0.01em;
+}
+.pcard-swatches {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.pcard-swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+.pcard-swatch:hover {
+  transform: scale(1.2);
+  border-color: var(--color-accent);
+}
