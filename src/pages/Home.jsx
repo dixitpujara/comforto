@@ -290,14 +290,12 @@ const FeaturedCard = ({ product }) => {
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { toggleCompare, isInCompare } = useCompare();
   const { addItem, isInCollection } = useCollection();
+  const [currentImage, setCurrentImage] = useState(product.image);
+  const [activeVariantId, setActiveVariantId] = useState(null);
 
   const isWishlisted = isInWishlist(product.id);
   const isCompared   = isInCompare(product.id);
   const inCollection = isInCollection(product.id);
-
-  const tagClass = product.tag === 'New' ? 'tag-new'
-                 : product.tag === 'Bestseller' ? 'tag-bestseller'
-                 : 'tag-popular';
 
   const handleWhatsAppShare = (e) => {
     e.preventDefault();
@@ -306,13 +304,16 @@ const FeaturedCard = ({ product }) => {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  const handleSwatchClick = (e, v) => {
+    e.preventDefault();
+    setCurrentImage(v.image || product.image);
+    setActiveVariantId(v.id);
+  };
+
   return (
     <Link to={`/p/${product.id}`} className="feat-card">
       <div className="feat-image-wrap">
-        {product.tag && (
-          <span className={`tag-chip ${tagClass} feat-tag`}>{product.tag.toUpperCase()}</span>
-        )}
-        <SafeImage src={product.image} alt={product.name} />
+        <SafeImage src={currentImage} alt={product.name} />
         <div className="feat-actions">
           <button
             className={`feat-icon ${isWishlisted ? 'active' : ''}`}
@@ -348,7 +349,14 @@ const FeaturedCard = ({ product }) => {
         <p className="feat-subtitle">{product.subtitle}</p>
         <div className="feat-swatches">
           {product.variants.slice(0, 4).map(v => (
-            <span key={v.id} className="feat-swatch" style={{ background: v.colorHex }} title={v.colorName} />
+            <button
+              type="button"
+              key={v.id}
+              className={`feat-swatch ${activeVariantId === v.id ? 'active' : ''}`}
+              style={{ background: v.colorHex }}
+              title={v.colorName}
+              onClick={(e) => handleSwatchClick(e, v)}
+            />
           ))}
         </div>
       </div>

@@ -657,6 +657,17 @@
   height: 13px;
   border-radius: 50%;
   border: 1px solid var(--color-border);
+  padding: 0;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+.feat-swatch:hover {
+  transform: scale(1.2);
+  border-color: var(--color-accent);
+}
+.feat-swatch.active {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(201, 166, 107, 0.35);
 }
 
 .featured-cta {
