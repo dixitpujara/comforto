@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Minus } from 'lucide-react';
-import { products, categories, materials, roomTypes, availabilities } from '../data/products';
+import { useProducts } from '../context/ProductsContext';
 import ProductCard from '../components/ProductCard';
 import '../assets/css/Catalog.css';
 
@@ -36,6 +36,7 @@ const FilterGroup = ({ title, items, state, onToggle, open, onToggleOpen }) => (
 
 const Catalog = () => {
   const [searchParams] = useSearchParams();
+  const { products, categories, materials, roomTypes, availabilities } = useProducts();
 
   const [selectedCategories, setSelectedCategories]  = useState([]);
   const [selectedMaterials,  setSelectedMaterials]   = useState([]);
@@ -95,7 +96,7 @@ const Catalog = () => {
   };
 
   const filtered = useMemo(() => products.filter(p => matchesExcept(p, null)),
-    [selectedCategories, selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
+    [products, selectedCategories, selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
 
   // Build option lists with counts; hide options whose count is 0
   const optionsWithCount = (groupName, opts, field) =>
@@ -107,10 +108,10 @@ const Catalog = () => {
       }))
       .filter(x => x.count > 0);
 
-  const categoryItems     = useMemo(() => optionsWithCount('Category',     categories,     'category'),     [selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
-  const materialItems     = useMemo(() => optionsWithCount('Material',     materials,      'material'),     [selectedCategories, selectedRooms, selectedAvail, searchQuery]);
-  const roomItems         = useMemo(() => optionsWithCount('Room',         roomTypes,      'roomType'),     [selectedCategories, selectedMaterials, selectedAvail, searchQuery]);
-  const availabilityItems = useMemo(() => optionsWithCount('Availability', availabilities, 'availability'), [selectedCategories, selectedMaterials, selectedRooms, searchQuery]);
+  const categoryItems     = useMemo(() => optionsWithCount('Category',     categories,     'category'),     [products, categories,     selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
+  const materialItems     = useMemo(() => optionsWithCount('Material',     materials,      'material'),     [products, materials,      selectedCategories, selectedRooms, selectedAvail, searchQuery]);
+  const roomItems         = useMemo(() => optionsWithCount('Room',         roomTypes,      'roomType'),     [products, roomTypes,      selectedCategories, selectedMaterials, selectedAvail, searchQuery]);
+  const availabilityItems = useMemo(() => optionsWithCount('Availability', availabilities, 'availability'), [products, availabilities, selectedCategories, selectedMaterials, selectedRooms, searchQuery]);
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;

@@ -10,6 +10,7 @@ import ProductDetail from './pages/ProductDetail';
 import Wishlist from './pages/Wishlist';
 import Compare from './pages/Compare';
 import Collection from './pages/Collection';
+import Admin from './pages/Admin';
 
 function App() {
   return (
@@ -25,9 +26,10 @@ function App() {
           <Route path="/compare" element={<Compare />} />
 
           {/* Staff-only */}
-          <Route path="/collection" element={<RequireAuth><Collection /></RequireAuth>} />
+          <Route path="/collection" element={<RequireAuth role="admin"><Collection /></RequireAuth>} />
           <Route path="/catalog" element={<RequireAuth><Catalog /></RequireAuth>} />
           <Route path="/product/:id" element={<RequireAuth><ProductDetail /></RequireAuth>} />
+          <Route path="/admin" element={<RequireAuth><Admin /></RequireAuth>} />
         </Routes>
       </main>
       <SiteFooter />

@@ -7,16 +7,17 @@ import {
   ChevronDown, ChevronLeft, ChevronRight,
   Heart, Scale, FilePlus, Check, MessageCircle
 } from 'lucide-react';
-import { products, categoryIcon } from '../data/products';
+import { categoryIcon } from '../data/products';
 import SafeImage from '../components/SafeImage';
+import { useProducts } from '../context/ProductsContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useCompare } from '../context/CompareContext';
 import { useCollection } from '../context/CollectionContext';
+import { useAuth } from '../context/AuthContext';
 import '../assets/css/Home.css';
 
 const ICONS = { Sofa, Table, Lamp, Bed, Armchair, Package };
 
-const CATEGORIES = ['Sofas', 'Tables', 'Lighting', 'Bedroom', 'Lounge', 'Storage'];
 const TAB_FILTERS = ['All', 'New', 'Bestseller', 'Popular'];
 
 /* ─────────── Hero (full-page parallax slider) ─────────── */
@@ -223,36 +224,40 @@ const ValuesStrip = () => (
 );
 
 /* ─────────── Browse categories ─────────── */
-const BrowseCategories = () => (
-  <section id="browse" className="browse container">
-    <header className="section-head">
-      <span className="eyebrow">By Category</span>
-      <h2 className="section-title">Browse Categories</h2>
-      <p>Curated essentials for every room in your home.</p>
-    </header>
-    <div className="browse-grid">
-      {CATEGORIES.map((c, i) => {
-        const Icon = ICONS[categoryIcon[c]] || Sofa;
-        return (
-          <Link key={c} to={`/catalog?category=${encodeURIComponent(c)}`} className="browse-card">
-            <div className="browse-icon"><Icon size={20} /></div>
-            <span className="browse-label">{c}</span>
-            <span className="browse-arrow"><ArrowRight size={14} /></span>
-          </Link>
-        );
-      })}
-    </div>
-  </section>
-);
+const BrowseCategories = () => {
+  const { rawCategories } = useProducts();
+  return (
+    <section id="browse" className="browse container">
+      <header className="section-head">
+        <span className="eyebrow">By Category</span>
+        <h2 className="section-title">Browse Categories</h2>
+        <p>Curated essentials for every room in your home.</p>
+      </header>
+      <div className="browse-grid">
+        {rawCategories.map((c) => {
+          const Icon = ICONS[categoryIcon[c]] || Sofa;
+          return (
+            <Link key={c} to={`/catalog?category=${encodeURIComponent(c)}`} className="browse-card">
+              <div className="browse-icon"><Icon size={20} /></div>
+              <span className="browse-label">{c}</span>
+              <span className="browse-arrow"><ArrowRight size={14} /></span>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
 
 /* ─────────── Featured selection ─────────── */
 const FeaturedSelection = () => {
   const [filter, setFilter] = useState('All');
+  const { products } = useProducts();
 
   const featured = useMemo(() => {
     const list = filter === 'All' ? products : products.filter(p => p.tag === filter);
     return list.slice(0, 8);
-  }, [filter]);
+  }, [filter, products]);
 
   return (
     <section className="featured container">
@@ -290,6 +295,8 @@ const FeaturedCard = ({ product }) => {
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { toggleCompare, isInCompare } = useCompare();
   const { addItem, isInCollection } = useCollection();
+  const { user } = useAuth();
+  const canUseCollection = user?.role === 'admin';
   const [currentImage, setCurrentImage] = useState(product.image);
   const [activeVariantId, setActiveVariantId] = useState(null);
 
@@ -329,13 +336,15 @@ const FeaturedCard = ({ product }) => {
           >
             <Scale size={16} />
           </button>
-          <button
-            className={`feat-icon ${inCollection ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); addItem(product); }}
-            title={inCollection ? 'In collection' : 'Add to collection'}
-          >
-            {inCollection ? <Check size={16} /> : <FilePlus size={16} />}
-          </button>
+          {canUseCollection && (
+            <button
+              className={`feat-icon ${inCollection ? 'active' : ''}`}
+              onClick={(e) => { e.preventDefault(); addItem(product); }}
+              title={inCollection ? 'In collection' : 'Add to collection'}
+            >
+              {inCollection ? <Check size={16} /> : <FilePlus size={16} />}
+            </button>
+          )}
           <button className="feat-icon" onClick={handleWhatsAppShare} title="Share">
             <MessageCircle size={16} />
           </button>

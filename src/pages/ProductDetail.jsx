@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { products } from '../data/products';
 import { Heart, Scale, ArrowLeft, MessageCircle, FilePlus, Check } from 'lucide-react';
+import { useProducts } from '../context/ProductsContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useCompare } from '../context/CompareContext';
 import { useCollection } from '../context/CollectionContext';
@@ -11,8 +11,10 @@ import '../assets/css/ProductDetail.css';
 
 const ProductDetail = ({ publicView = false }) => {
   const { id } = useParams();
-  const product = useMemo(() => products.find(p => p.id === id), [id]);
-  const { isAuthed } = useAuth();
+  const { products } = useProducts();
+  const product = useMemo(() => products.find(p => p.id === id), [id, products]);
+  const { isAuthed, user } = useAuth();
+  const canUseCollection = user?.role === 'admin';
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { toggleCompare, isInCompare } = useCompare();
   const { addItem, isInCollection } = useCollection();
@@ -149,13 +151,15 @@ const ProductDetail = ({ publicView = false }) => {
           </div>
 
           <div className="detail-actions">
-            <button
-              className={`btn btn-primary btn-large ${inCollection ? 'active' : ''}`}
-              onClick={() => addItem(product)}
-              disabled={inCollection}
-            >
-              {inCollection ? <><Check size={18} /> Added to Collection</> : <><FilePlus size={18} /> Add to Collection</>}
-            </button>
+            {canUseCollection && (
+              <button
+                className={`btn btn-primary btn-large ${inCollection ? 'active' : ''}`}
+                onClick={() => addItem(product)}
+                disabled={inCollection}
+              >
+                {inCollection ? <><Check size={18} /> Added to Collection</> : <><FilePlus size={18} /> Add to Collection</>}
+              </button>
+            )}
             <button className="btn btn-whatsapp btn-large" onClick={handleWhatsAppShare}>
               <MessageCircle size={18} /> Inquire on WhatsApp
             </button>

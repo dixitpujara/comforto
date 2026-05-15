@@ -4,6 +4,7 @@ import { Heart, MessageCircle, Scale, FilePlus, Check } from 'lucide-react';
 import { useWishlist } from '../context/WishlistContext';
 import { useCompare } from '../context/CompareContext';
 import { useCollection } from '../context/CollectionContext';
+import { useAuth } from '../context/AuthContext';
 import SafeImage from './SafeImage';
 import '../assets/css/ProductCard.css';
 
@@ -11,6 +12,8 @@ const ProductCard = ({ product, to }) => {
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { toggleCompare, isInCompare } = useCompare();
   const { addItem, isInCollection } = useCollection();
+  const { user } = useAuth();
+  const canUseCollection = user?.role === 'admin';
   const [currentImage, setCurrentImage] = useState(product.image);
 
   const isWishlisted = isInWishlist(product.id);
@@ -52,13 +55,15 @@ const ProductCard = ({ product, to }) => {
           >
             <Scale size={16} />
           </button>
-          <button
-            className={`pcard-icon ${inCollection ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); addItem(product); }}
-            title={inCollection ? 'In collection' : 'Add to collection'}
-          >
-            {inCollection ? <Check size={16} /> : <FilePlus size={16} />}
-          </button>
+          {canUseCollection && (
+            <button
+              className={`pcard-icon ${inCollection ? 'active' : ''}`}
+              onClick={(e) => { e.preventDefault(); addItem(product); }}
+              title={inCollection ? 'In collection' : 'Add to collection'}
+            >
+              {inCollection ? <Check size={16} /> : <FilePlus size={16} />}
+            </button>
+          )}
           <button className="pcard-icon" onClick={handleWhatsAppShare} title="Share">
             <MessageCircle size={16} />
           </button>
