@@ -2,20 +2,19 @@ import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart } from 'lucide-react';
 import { useWishlist } from '../context/WishlistContext';
-import { products } from '../data/products';
+import { useProducts } from '../context/ProductsContext';
 import ProductCard from '../components/ProductCard';
 import '../assets/css/Catalog.css';
 
 const Wishlist = () => {
   const { wishlist } = useWishlist();
+  const { products } = useProducts();
 
-  // Reconcile saved IDs against the current product catalog so stale or
-  // legacy-schema entries (saved before pricing/subtitle existed) are skipped.
   const items = useMemo(() => {
     return wishlist
       .map(saved => products.find(p => p.id === saved.id) || saved)
       .filter(p => p && p.name);
-  }, [wishlist]);
+  }, [wishlist, products]);
 
   return (
     <div className="catalog container animate-fade-in">

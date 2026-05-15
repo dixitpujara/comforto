@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Search, Heart, Scale, LogOut, User, FileText } from 'lucide-react';
+import { Search, Heart, Scale, LogOut, User, FileText, Settings } from 'lucide-react';
 import { useWishlist } from '../context/WishlistContext';
 import { useCompare } from '../context/CompareContext';
 import { useCollection } from '../context/CollectionContext';
+import { useProducts } from '../context/ProductsContext';
 import { useAuth } from '../context/AuthContext';
 import '../assets/css/Navbar.css';
-
-const CATEGORIES = ['Sofas', 'Tables', 'Lighting', 'Bedroom', 'Lounge', 'Storage'];
 
 const Navbar = () => {
   const { wishlist } = useWishlist();
   const { compareList } = useCompare();
   const { count: collectionCount } = useCollection();
+  const { rawCategories } = useProducts();
   const { user, logout, isAuthed } = useAuth();
   const navigate = useNavigate();
   const [q, setQ] = useState('');
@@ -34,7 +34,7 @@ const Navbar = () => {
         </Link>
 
         <nav className="navbar-links">
-          {CATEGORIES.map(c => (
+          {rawCategories.map(c => (
             <NavLink
               key={c}
               to={`/catalog?category=${encodeURIComponent(c)}`}
@@ -61,10 +61,16 @@ const Navbar = () => {
             {compareList.length > 0 && <span className="badge">{compareList.length}</span>}
           </Link>
 
-          {isAuthed && (
+          {isAuthed && user?.role === 'admin' && (
             <Link to="/collection" className="navbar-icon" title="Create Collection">
               <FileText size={18} />
               {collectionCount > 0 && <span className="badge">{collectionCount}</span>}
+            </Link>
+          )}
+
+          {isAuthed && (user?.role === 'admin' || user?.role === 'designer') && (
+            <Link to="/admin" className="navbar-icon" title="Admin">
+              <Settings size={18} />
             </Link>
           )}
 
