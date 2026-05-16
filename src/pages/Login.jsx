@@ -42,7 +42,7 @@ const Login = () => {
 
         <div className="login-hint">
           <strong>Demo logins:</strong>
-          <code>admin@comforto.in / comforto@2024</code>
+          <code>staff@comforto.in / comforto@2024</code>
           <code>designer@comforto.in / design@123</code>
         </div>
       </div>
