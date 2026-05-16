@@ -68,7 +68,7 @@ const Navbar = () => {
             </Link>
           )}
 
-          {isAuthed && (user?.role === 'admin' || user?.role === 'designer') && (
+          {isAuthed && user?.role === 'admin' && (
             <Link to="/admin" className="navbar-icon" title="Admin">
               <Settings size={18} />
             </Link>
