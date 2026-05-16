@@ -1,13 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <rect width="64" height="64" rx="12" fill="#0F0F0F"/>
+  <!-- Black circle (matches .navbar-monogram background) -->
+  <circle cx="32" cy="32" r="32" fill="#1A1A1A"/>
+
+  <!-- Inner gold ring at low opacity (matches .navbar-monogram::after) -->
+  <circle cx="32" cy="32" r="25.6" fill="none" stroke="#C9A66B" stroke-width="2" opacity="0.4"/>
+
+  <!-- Gold serif C (matches .navbar-monogram letter) -->
   <text
     x="50%"
     y="50%"
     text-anchor="middle"
     dominant-baseline="central"
     font-family="'Playfair Display', Georgia, 'Times New Roman', serif"
-    font-size="44"
-    font-weight="500"
-    fill="#F5EEE3"
+    font-size="36"
+    font-weight="600"
+    fill="#C9A66B"
   >C</text>
 </svg>
