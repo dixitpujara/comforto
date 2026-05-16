@@ -4,12 +4,18 @@ import { staff as seedStaff, ROLES } from '../data/staff';
 const UsersContext = createContext();
 export const useUsers = () => useContext(UsersContext);
 
-const STORAGE_KEY = 'comforto_users_v1';
+// Versioned: bump when the seed user list changes meaningfully (e.g. emails,
+// roles) so stale browser drafts can't lock users out of login. Old draft keys
+// are cleaned up below.
+const STORAGE_KEY = 'comforto_users_v2';
+const LEGACY_KEYS = ['comforto_users_v1'];
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const loadDraft = () => {
   try {
+    // Drop any older versions silently — they can have stale credentials.
+    LEGACY_KEYS.forEach(k => localStorage.removeItem(k));
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
