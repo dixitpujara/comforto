@@ -7,8 +7,8 @@ export const useUsers = () => useContext(UsersContext);
 // Versioned: bump when the seed user list changes meaningfully (e.g. emails,
 // roles) so stale browser drafts can't lock users out of login. Old draft keys
 // are cleaned up below.
-const STORAGE_KEY = 'comforto_users_v2';
-const LEGACY_KEYS = ['comforto_users_v1'];
+const STORAGE_KEY = 'comforto_users_v3';
+const LEGACY_KEYS = ['comforto_users_v1', 'comforto_users_v2'];
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 

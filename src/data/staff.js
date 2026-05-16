@@ -23,5 +23,5 @@ export const roleLabel = (roleId) => ROLES[roleId]?.label || roleId;
 
 export const staff = [
   { id: 'admin',    name: 'Staff',           email: 'staff@comforto.in',    password: 'comforto@2024', role: 'admin' },
-  { id: 'designer', name: 'Interior',        email: 'designer@comforto.in', password: 'design@123',    role: 'designer' }
+  { id: 'designer', name: 'Interior',        email: 'interior@comforto.in', password: 'interior@123',  role: 'designer' }
 ];
