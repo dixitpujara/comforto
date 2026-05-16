@@ -39,12 +39,6 @@ const Login = () => {
           {error && <div className="login-error">{error}</div>}
           <button type="submit" className="btn btn-primary btn-large">Sign In</button>
         </form>
-
-        <div className="login-hint">
-          <strong>Demo logins:</strong>
-          <code>admin@comforto.in / comforto@2024</code>
-          <code>designer@comforto.in / design@123</code>
-        </div>
       </div>
     </div>
   );
