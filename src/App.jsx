@@ -29,7 +29,7 @@ function App() {
           <Route path="/collection" element={<RequireAuth role="admin"><Collection /></RequireAuth>} />
           <Route path="/catalog" element={<RequireAuth><Catalog /></RequireAuth>} />
           <Route path="/product/:id" element={<RequireAuth><ProductDetail /></RequireAuth>} />
-          <Route path="/admin" element={<RequireAuth><Admin /></RequireAuth>} />
+          <Route path="/admin" element={<RequireAuth role="admin"><Admin /></RequireAuth>} />
         </Routes>
       </main>
       <SiteFooter />
