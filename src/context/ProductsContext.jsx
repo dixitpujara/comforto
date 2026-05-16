@@ -5,13 +5,19 @@ import { useAuth } from './AuthContext';
 const ProductsContext = createContext();
 export const useProducts = () => useContext(ProductsContext);
 
-const STORAGE_KEY = 'comforto_catalog_v1';
+// Versioned: bump when the seed catalog changes shape so stale browser drafts
+// don't show as "unexported changes" against the new seed. Legacy keys below
+// are cleaned up on load.
+const STORAGE_KEY = 'comforto_catalog_v2';
+const LEGACY_KEYS = ['comforto_catalog_v1'];
 
 // Returns a deep clone so callers can't mutate the seed.
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const loadDraft = () => {
   try {
+    // Drop older versions silently — their shape may not match the new seed.
+    LEGACY_KEYS.forEach(k => localStorage.removeItem(k));
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
