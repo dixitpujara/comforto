@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import logo from '../assets/logo.svg';
 import '../assets/css/Login.css';
 
 const Login = () => {
@@ -24,10 +23,7 @@ const Login = () => {
   return (
     <div className="login-page">
       <div className="login-card">
-        <Link to="/" className="login-brand" aria-label="Comforto Furniture">
-          <img src={logo} alt="Comforto Furniture" />
-        </Link>
-        <h1>Staff Sign In</h1>
+        <h1>Sign In</h1>
         <p className="login-subtitle">Internal access for designers and sales associates.</p>
 
         <form onSubmit={onSubmit} className="login-form">
