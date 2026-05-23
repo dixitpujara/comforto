@@ -4,7 +4,11 @@ import { staff as seedStaff, ROLES } from '../data/staff';
 const UsersContext = createContext();
 export const useUsers = () => useContext(UsersContext);
 
-const STORAGE_KEY = 'comforto_users_v1';
+// Bump this when the seed in src/data/staff.js changes in a way that
+// must override browser-cached user lists (e.g. renaming a built-in
+// account's email or password). Each bump causes one-time loss of
+// localStorage edits made via the Admin > Users tab.
+const STORAGE_KEY = 'comforto_users_v2';
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
