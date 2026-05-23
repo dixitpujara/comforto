@@ -27,7 +27,7 @@
   display: flex;
   align-items: center;
   gap: 1.75rem;
-  padding: 0.9rem 1.5rem;
+  padding: 0.6rem 1.5rem;
 }
 
 .navbar-brand {
@@ -35,8 +35,9 @@
   align-items: center;
 }
 .navbar-logo {
-  height: 38px;
-  width: auto;
+  width: 200px;
+  height: 100px;
+  object-fit: contain;
   display: block;
 }
 
@@ -47,9 +48,10 @@
 }
 .navbar-link {
   position: relative;
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
-  font-weight: 500;
+  font-size: 0.98rem;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  letter-spacing: 0.01em;
   padding: 0.25rem 0;
 }
 .navbar-link::after {
@@ -175,5 +177,5 @@
   .navbar-links { display: none; }
   .navbar-search { display: none; }
   .navbar-inner { gap: 1rem; }
-  .navbar-logo { height: 32px; }
+  .navbar-logo { width: 140px; height: 70px; }
 }
