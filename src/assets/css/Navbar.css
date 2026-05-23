@@ -27,7 +27,7 @@
   display: flex;
   align-items: center;
   gap: 1.75rem;
-  padding: 0.6rem 1.5rem;
+  padding: 0.9rem 1.5rem;
 }
 
 .navbar-brand {
@@ -36,8 +36,7 @@
 }
 .navbar-logo {
   width: 200px;
-  height: 100px;
-  object-fit: contain;
+  height: auto;
   display: block;
 }
 
@@ -177,5 +176,5 @@
   .navbar-links { display: none; }
   .navbar-search { display: none; }
   .navbar-inner { gap: 1rem; }
-  .navbar-logo { width: 140px; height: 70px; }
+  .navbar-logo { width: 150px; }
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, MapPin, Phone, Clock } from 'lucide-react';
 import SafeImage from './SafeImage';
+import logoLight from '../assets/logo-light.svg';
 import '../assets/css/SiteFooter.css';
 
 const SiteFooter = () => (
@@ -72,12 +73,8 @@ const SiteFooter = () => (
     <div className="site-footer-band">
       <span className="site-footer-stripe" aria-hidden="true" />
       <div className="container site-footer-band-inner">
-        <Link to="/" className="site-footer-brand-row">
-          <span className="site-footer-monogram" aria-hidden="true">C</span>
-          <span>
-            <span className="site-footer-brand">Comforto</span>
-            <span className="site-footer-tag">Furniture</span>
-          </span>
+        <Link to="/" className="site-footer-brand-row" aria-label="Comforto Furniture">
+          <img src={logoLight} alt="Comforto Furniture" className="site-footer-logo" />
         </Link>
         <span className="site-footer-copy">
           © {new Date().getFullYear()} Comforto Furniture · Crafted for enduring quality.
