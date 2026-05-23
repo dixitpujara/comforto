@@ -15,16 +15,6 @@
   padding: 2.5rem;
   box-shadow: var(--shadow-md);
 }
-.login-brand {
-  display: block;
-  margin-bottom: 1.5rem;
-  line-height: 0;
-}
-.login-brand img {
-  width: 180px;
-  height: auto;
-  display: block;
-}
 .login-card h1 {
   font-size: 1.75rem;
   margin-bottom: 0.4rem;
