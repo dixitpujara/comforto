@@ -17,9 +17,13 @@
 }
 .login-brand {
   display: block;
-  font-family: var(--font-serif);
-  font-size: 1.4rem;
   margin-bottom: 1.5rem;
+  line-height: 0;
+}
+.login-brand img {
+  width: 180px;
+  height: auto;
+  display: block;
 }
 .login-card h1 {
   font-size: 1.75rem;

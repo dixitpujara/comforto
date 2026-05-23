@@ -6,6 +6,7 @@ import { useCompare } from '../context/CompareContext';
 import { useCollection } from '../context/CollectionContext';
 import { useProducts } from '../context/ProductsContext';
 import { useAuth } from '../context/AuthContext';
+import logo from '../assets/logo.svg';
 import '../assets/css/Navbar.css';
 
 const Navbar = () => {
@@ -27,10 +28,8 @@ const Navbar = () => {
   return (
     <header className="navbar">
       <div className="container navbar-inner">
-        <Link to="/" className="navbar-brand">
-          <span className="navbar-monogram" aria-hidden="true">C</span>
-          <span className="navbar-wordmark">Comforto</span>
-          <span className="navbar-eyebrow">Furniture</span>
+        <Link to="/" className="navbar-brand" aria-label="Comforto Furniture">
+          <img src={logo} alt="Comforto Furniture" className="navbar-logo" />
         </Link>
 
         <nav className="navbar-links">

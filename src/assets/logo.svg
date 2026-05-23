@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 70" font-family="'Playfair Display', Georgia, 'Times New Roman', serif">
+  <g>
+    <circle cx="32" cy="35" r="24" fill="#C9A66B"/>
+    <circle cx="32" cy="35" r="20.5" fill="none" stroke="#A78650" stroke-width="0.6" opacity="0.55"/>
+    <text x="32" y="35" text-anchor="middle" dominant-baseline="central" font-size="30" font-weight="600" fill="#1A1A1A">C</text>
+  </g>
+  <text x="68" y="33" font-size="28" font-weight="600" fill="#1A1A1A" dominant-baseline="middle" letter-spacing="-0.3">Comforto</text>
+  <text x="68" y="54" font-size="9" font-weight="700" fill="#A78650" letter-spacing="4" font-family="'Helvetica Neue', Arial, sans-serif">FURNITURE</text>
+</svg>
