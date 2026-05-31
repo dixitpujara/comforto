@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { productsData as seedData } from '../data/products';
 import { useAuth } from './AuthContext';
+import { apiGet, apiPut, ApiUnavailable } from '../api/client';
 
 const ProductsContext = createContext();
 export const useProducts = () => useContext(ProductsContext);
@@ -23,28 +24,65 @@ const loadDraft = () => {
 };
 
 const saveDraft = (data) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* ignore */ }
 };
 
 const newId = () => `prod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 const newVariantId = (productId) => `${productId}-v-${Math.random().toString(36).slice(2, 6)}`;
 
 export const ProductsProvider = ({ children }) => {
-  const { isAuthed } = useAuth();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
-  // The "draft" is the admin's editable working copy. It's loaded from
-  // localStorage and any change is persisted immediately. Customers (not
-  // signed in) read straight from the seed; signed-in admins read from the
-  // draft so they can preview their pending edits.
+  // The shared catalog. On Vercel this is hydrated from KV (so every visitor
+  // sees the same live data); offline/dev it falls back to localStorage + seed.
   const [draft, setDraft] = useState(() => loadDraft() || clone(seedData));
 
-  useEffect(() => {
-    saveDraft(draft);
-  }, [draft]);
+  // Whether the serverless API is reachable. Flipped off on the first
+  // ApiUnavailable so we stop trying to PUT and behave like the old per-browser
+  // build during local development.
+  const apiAvailable = useRef(true);
+  const isAdminRef = useRef(isAdmin);
+  useEffect(() => { isAdminRef.current = isAdmin; }, [isAdmin]);
 
-  // What every consumer reads. Public visitors always see the seed. Admins see
-  // the draft (which is the seed plus their unexported edits).
-  const live = isAuthed ? draft : seedData;
+  // Hydrate from the shared store once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    apiGet('/api/catalog')
+      .then(data => {
+        if (cancelled || !data || !Array.isArray(data.products)) return;
+        setDraft(data);
+        saveDraft(data);
+      })
+      .catch(err => {
+        if (err instanceof ApiUnavailable) apiAvailable.current = false;
+        // Other errors (e.g. transient 500): keep the local copy we already have.
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist a new catalog state everywhere: local cache always, and the shared
+  // store when an admin is signed in and the API is reachable.
+  const persist = (data) => {
+    saveDraft(data);
+    if (apiAvailable.current && isAdminRef.current) {
+      apiPut('/api/catalog', data).catch(err => {
+        if (err instanceof ApiUnavailable) apiAvailable.current = false;
+        // Surfaced failures (401/403/500) are swallowed here; the optimistic
+        // local state still reflects the change for this session.
+      });
+    }
+  };
+
+  // Apply a pure update to the catalog and persist the result.
+  const commit = (next) => {
+    setDraft(next);
+    persist(next);
+    return next;
+  };
+
+  // Everyone — visitors and staff — reads the shared catalog.
+  const live = draft;
 
   const hasUnexportedChanges = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(seedData),
@@ -75,19 +113,19 @@ export const ProductsProvider = ({ children }) => {
       features:     product.features || [],
       variants:     safeVariants
     };
-    setDraft(d => ({ ...d, products: [...d.products, next] }));
+    commit({ ...draft, products: [...draft.products, next] });
     return id;
   };
 
   const updateProduct = (id, patch) => {
-    setDraft(d => ({
-      ...d,
-      products: d.products.map(p => p.id === id ? { ...p, ...patch } : p)
-    }));
+    commit({
+      ...draft,
+      products: draft.products.map(p => p.id === id ? { ...p, ...patch } : p)
+    });
   };
 
   const deleteProduct = (id) => {
-    setDraft(d => ({ ...d, products: d.products.filter(p => p.id !== id) }));
+    commit({ ...draft, products: draft.products.filter(p => p.id !== id) });
   };
 
   // -- Taxonomy CRUD (categories / materials / roomTypes) --
@@ -95,11 +133,9 @@ export const ProductsProvider = ({ children }) => {
   const addTaxonomyValue = (kind, value) => {
     const v = (value || '').trim();
     if (!v) return false;
-    setDraft(d => {
-      const existing = d[kind] || [];
-      if (existing.includes(v)) return d;
-      return { ...d, [kind]: [...existing, v] };
-    });
+    const existing = draft[kind] || [];
+    if (existing.includes(v)) return false;
+    commit({ ...draft, [kind]: [...existing, v] });
     return true;
   };
 
@@ -109,26 +145,23 @@ export const ProductsProvider = ({ children }) => {
     const productField = kind === 'categories' ? 'category'
                       : kind === 'materials'  ? 'material'
                       : 'roomType';
-    setDraft(d => ({
-      ...d,
-      [kind]: (d[kind] || []).map(x => x === oldValue ? v : x),
-      products: d.products.map(p => p[productField] === oldValue ? { ...p, [productField]: v } : p)
-    }));
+    commit({
+      ...draft,
+      [kind]: (draft[kind] || []).map(x => x === oldValue ? v : x),
+      products: draft.products.map(p => p[productField] === oldValue ? { ...p, [productField]: v } : p)
+    });
   };
 
   const deleteTaxonomyValue = (kind, value) => {
     const productField = kind === 'categories' ? 'category'
                       : kind === 'materials'  ? 'material'
                       : 'roomType';
-    setDraft(d => {
-      const inUse = d.products.filter(p => p[productField] === value).length;
-      if (inUse > 0) {
-        // Caller is expected to confirm — but we still refuse to leave
-        // orphaned references. Returning early so the UI can warn.
-        return d;
-      }
-      return { ...d, [kind]: (d[kind] || []).filter(x => x !== value) };
-    });
+    const inUse = draft.products.filter(p => p[productField] === value).length;
+    if (inUse > 0) {
+      // Refuse to leave orphaned references — UI is expected to warn first.
+      return;
+    }
+    commit({ ...draft, [kind]: (draft[kind] || []).filter(x => x !== value) });
   };
 
   const taxonomyUsageCount = (kind, value) => {
@@ -139,13 +172,13 @@ export const ProductsProvider = ({ children }) => {
   };
 
   // -- Draft management --
-  const resetDraftToSeed = () => setDraft(clone(seedData));
+  const resetDraftToSeed = () => commit(clone(seedData));
 
   const importDraft = (json) => {
     try {
       const parsed = typeof json === 'string' ? JSON.parse(json) : json;
       if (!parsed || !Array.isArray(parsed.products)) throw new Error('Invalid file');
-      setDraft({
+      commit({
         categories:     parsed.categories     || seedData.categories,
         materials:      parsed.materials      || seedData.materials,
         roomTypes:      parsed.roomTypes      || seedData.roomTypes,

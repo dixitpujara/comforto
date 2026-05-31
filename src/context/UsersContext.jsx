@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { staff as seedStaff, ROLES } from '../data/staff';
+import { useAuth } from './AuthContext';
+import { apiGet, apiPut, ApiUnavailable } from '../api/client';
 
 const UsersContext = createContext();
 export const useUsers = () => useContext(UsersContext);
 
 // Bump this when the seed in src/data/staff.js changes in a way that
-// must override browser-cached user lists (e.g. renaming a built-in
-// account's email or password). Each bump causes one-time loss of
-// localStorage edits made via the Admin > Users tab.
+// must override browser-cached user lists.
 const STORAGE_KEY = 'comforto_users_v2';
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -24,14 +24,51 @@ const loadDraft = () => {
   }
 };
 
+const saveDraft = (list) => {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch { /* ignore */ }
+};
+
 const newId = () => `u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
 
 export const UsersProvider = ({ children }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const [users, setUsers] = useState(() => loadDraft() || clone(seedStaff));
 
+  const apiAvailable = useRef(true);
+
+  // Load the shared staff list once an admin is signed in (the endpoint is
+  // admin-gated). Visitors and designers never fetch it.
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-  }, [users]);
+    if (!isAdmin || !apiAvailable.current) return;
+    let cancelled = false;
+    apiGet('/api/users')
+      .then(list => {
+        if (cancelled || !Array.isArray(list)) return;
+        setUsers(list);
+        saveDraft(list);
+      })
+      .catch(err => {
+        if (err instanceof ApiUnavailable) apiAvailable.current = false;
+      });
+    return () => { cancelled = true; };
+  }, [isAdmin]);
+
+  const persist = (list) => {
+    saveDraft(list);
+    if (apiAvailable.current && isAdmin) {
+      apiPut('/api/users', list).catch(err => {
+        if (err instanceof ApiUnavailable) apiAvailable.current = false;
+      });
+    }
+  };
+
+  const commit = (list) => {
+    setUsers(list);
+    persist(list);
+    return list;
+  };
 
   const hasUnexportedChanges = useMemo(
     () => JSON.stringify(users) !== JSON.stringify(seedStaff),
@@ -48,7 +85,7 @@ export const UsersProvider = ({ children }) => {
     if (!ROLES[role]) return { ok: false, error: 'Pick a valid role.' };
     if (emailExists(e)) return { ok: false, error: 'A user with this email already exists.' };
     const id = newId();
-    setUsers(list => [...list, { id, name: (name || '').trim() || e, email: e, password, role }]);
+    commit([...users, { id, name: (name || '').trim() || e, email: e, password, role }]);
     return { ok: true, id };
   };
 
@@ -62,7 +99,7 @@ export const UsersProvider = ({ children }) => {
     if (patch.role !== undefined && !ROLES[patch.role]) {
       return { ok: false, error: 'Pick a valid role.' };
     }
-    setUsers(list => list.map(u => u.id === id ? { ...u, ...patch } : u));
+    commit(users.map(u => u.id === id ? { ...u, ...patch } : u));
     return { ok: true };
   };
 
@@ -74,13 +111,13 @@ export const UsersProvider = ({ children }) => {
       const adminCount = users.filter(u => u.role === 'admin').length;
       if (adminCount <= 1) return { ok: false, error: 'You cannot delete the last Staff (admin) user.' };
     }
-    setUsers(list => list.filter(u => u.id !== id));
+    commit(users.filter(u => u.id !== id));
     return { ok: true };
   };
 
-  const resetToSeed = () => setUsers(clone(seedStaff));
+  const resetToSeed = () => commit(clone(seedStaff));
 
-  // Used by AuthContext.login
+  // Used by AuthContext's offline fallback only; primary login is server-side.
   const findByCredentials = (email, password) => {
     const e = (email || '').trim().toLowerCase();
     return users.find(u => u.email.toLowerCase() === e && u.password === password) || null;

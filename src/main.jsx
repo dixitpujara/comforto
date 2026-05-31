@@ -13,8 +13,8 @@ import { CollectionProvider } from './context/CollectionContext.jsx';
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <HashRouter>
-      <UsersProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <UsersProvider>
           <ProductsProvider>
             <WishlistProvider>
               <CompareProvider>
@@ -24,8 +24,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               </CompareProvider>
             </WishlistProvider>
           </ProductsProvider>
-        </AuthProvider>
-      </UsersProvider>
+        </UsersProvider>
+      </AuthProvider>
     </HashRouter>
   </React.StrictMode>,
 )
