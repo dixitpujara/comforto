@@ -6,7 +6,7 @@
 // matches the app's internal-tool threat model — it stops anonymous visitors
 // from POSTing to the shared store, which is the important part now that edits
 // are global.
-import { kv } from '@vercel/kv';
+import { kv } from './kv.js';
 import { randomUUID } from 'crypto';
 
 const SESSION_KEY = 'comforto:sessions';
