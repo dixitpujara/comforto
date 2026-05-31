@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Search, Heart, Scale, LogOut, User, FileText, Settings } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Search, Heart, Scale, LogOut, User, FileText, Settings, Menu, X } from 'lucide-react';
 import { useWishlist } from '../context/WishlistContext';
 import { useCompare } from '../context/CompareContext';
 import { useCollection } from '../context/CollectionContext';
@@ -16,11 +16,28 @@ const Navbar = () => {
   const { rawCategories } = useProducts();
   const { user, logout, isAuthed } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [q, setQ] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef(null);
+
+  // Close the mobile menu whenever the route changes.
+  useEffect(() => { setMenuOpen(false); setSearchOpen(false); }, [location.pathname, location.search]);
+
+  // Focus the input as soon as the search bar expands.
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  const runSearch = () => {
+    navigate(`/catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    setSearchOpen(false);
+  };
 
   const onSearch = (e) => {
     e.preventDefault();
-    navigate(`/catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    runSearch();
   };
 
   const onLogout = () => { logout(); navigate('/'); };
@@ -45,15 +62,16 @@ const Navbar = () => {
         </nav>
 
         <div className="navbar-actions">
-          <form className="navbar-search" onSubmit={onSearch}>
-            <Search size={16} />
-            <input
-              type="search"
-              placeholder="Search curated pieces..."
-              value={q}
-              onChange={e => setQ(e.target.value)}
-            />
-          </form>
+          <button
+            type="button"
+            className={`navbar-icon ${searchOpen ? 'active' : ''}`}
+            aria-label="Search"
+            aria-expanded={searchOpen}
+            title="Search"
+            onClick={() => setSearchOpen(o => !o)}
+          >
+            <Search size={18} />
+          </button>
 
           <Link to="/compare" className="navbar-icon" title="Compare">
             <Scale size={18} />
@@ -85,6 +103,101 @@ const Navbar = () => {
                 <LogOut size={14} /> Logout
               </button>
             </div>
+          ) : (
+            <Link to="/login" className="navbar-staff">Login</Link>
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="navbar-toggle"
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(o => !o)}
+        >
+          {menuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </div>
+
+      <div className={`navbar-searchbar ${searchOpen ? 'open' : ''}`}>
+        <form className="container navbar-searchbar-form" onSubmit={onSearch}>
+          <Search size={18} />
+          <input
+            ref={searchInputRef}
+            type="search"
+            placeholder="Search curated pieces..."
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            tabIndex={searchOpen ? 0 : -1}
+          />
+          <button type="submit" className="navbar-searchbar-submit">Search</button>
+          <button
+            type="button"
+            className="navbar-searchbar-close"
+            aria-label="Close search"
+            onClick={() => setSearchOpen(false)}
+          >
+            <X size={18} />
+          </button>
+        </form>
+      </div>
+
+      <div className={`navbar-mobile ${menuOpen ? 'open' : ''}`}>
+        <form className="navbar-mobile-search" onSubmit={onSearch}>
+          <Search size={16} />
+          <input
+            type="search"
+            placeholder="Search curated pieces..."
+            value={q}
+            onChange={e => setQ(e.target.value)}
+          />
+        </form>
+
+        <nav className="navbar-mobile-links">
+          {rawCategories.map(c => (
+            <NavLink
+              key={c}
+              to={`/catalog?category=${encodeURIComponent(c)}`}
+              className="navbar-mobile-link"
+            >
+              {c}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="navbar-mobile-actions">
+          <Link to="/compare" className="navbar-mobile-action">
+            <Scale size={18} /> Compare
+            {compareList.length > 0 && <span className="badge">{compareList.length}</span>}
+          </Link>
+
+          <Link to="/wishlist" className="navbar-mobile-action">
+            <Heart size={18} /> Wishlist
+            {wishlist.length > 0 && <span className="badge">{wishlist.length}</span>}
+          </Link>
+
+          {isAuthed && user?.role === 'admin' && (
+            <Link to="/collection" className="navbar-mobile-action">
+              <FileText size={18} /> Create Collection
+              {collectionCount > 0 && <span className="badge">{collectionCount}</span>}
+            </Link>
+          )}
+
+          {isAuthed && user?.role === 'admin' && (
+            <Link to="/admin" className="navbar-mobile-action">
+              <Settings size={18} /> Admin
+            </Link>
+          )}
+        </div>
+
+        <div className="navbar-mobile-auth">
+          {isAuthed ? (
+            <>
+              <span className="navbar-mobile-user"><User size={16} /> {user.name}</span>
+              <button className="navbar-staff" onClick={onLogout}>
+                <LogOut size={14} /> Logout
+              </button>
+            </>
           ) : (
             <Link to="/login" className="navbar-staff">Login</Link>
           )}

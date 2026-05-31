@@ -20,6 +20,9 @@ dist-ssr
 # Vercel
 .vercel
 
+# Claude Code local agent data
+.claude
+
 # Project archives
 *.zip
 *.tar
