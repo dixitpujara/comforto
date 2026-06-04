@@ -51,7 +51,11 @@ const Collection = () => {
     let cancelled = false;
     const t = setTimeout(() => {
       if (cancelled) return;
-      preparedRef.current = { key: argsKey, promise: quotationPdfFile(args).catch(() => null) };
+      const entry = { key: argsKey, file: null, promise: null };
+      entry.promise = quotationPdfFile(args)
+        .then(r => { if (!cancelled) entry.file = r?.file || null; return r; })
+        .catch(() => null);
+      preparedRef.current = entry;
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
   }, [argsKey, canGenerate, args]);
@@ -109,11 +113,24 @@ const Collection = () => {
     }
   };
 
-  // Generate the PDF, upload it for a shareable link, then open WhatsApp / email
-  // DIRECTLY (wa.me / mailto) with the message + PDF link — no share sheet. If
-  // the upload isn't available, download the PDF and note it in the message.
+  // True when this device can share the prepared PDF file natively (iPad,
+  // iPhone, Android, Safari/modern Chrome). Checked synchronously in the click
+  // handler so we only pre-open a fallback tab when we'll actually need one
+  // (avoids a blank tab flashing on iPad/phones where the share sheet handles it).
+  const canFileShareNow = () => {
+    const p = preparedRef.current;
+    return !!(
+      p && p.key === argsKey && p.file &&
+      typeof navigator !== 'undefined' && navigator.canShare &&
+      navigator.canShare({ files: [p.file] })
+    );
+  };
+
+  // Share the quote. Primary path: the native share sheet with the REAL PDF
+  // attached plus the message — this is how iPad/iPhone/Android send the PDF to
+  // WhatsApp/Mail, and it needs no server. Fallback (older desktop browsers):
+  // upload for a download link and open wa.me / mailto directly, or download.
   const shareQuote = async (channel, targetWin) => {
-    // Reuse the file prepared in the background if it matches the current quote.
     let pdf = null;
     try {
       const prepared = preparedRef.current;
@@ -128,12 +145,28 @@ const Collection = () => {
       alert('Could not generate the PDF. Please try again.');
       return;
     }
-    const { blob, fileName, quoteNo } = pdf;
+    const { file, blob, fileName, quoteNo } = pdf;
     setGeneratedQuote(quoteNo);
 
-    const pdfUrl = await uploadPdf(blob, fileName);
-    if (!pdfUrl) triggerDownload(blob, fileName); // no link → at least hand over the file
+    // Primary: native share with the actual PDF file + message.
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Quotation ${quoteNo} · Comforto Furniture`,
+          text: buildMessage(quoteNo, null, false),
+        });
+        if (targetWin) targetWin.close();
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') { if (targetWin) targetWin.close(); return; }
+        // Otherwise fall through to the link / download path.
+      }
+    }
 
+    // Fallback: upload for a shareable link (needs Blob), else download.
+    const pdfUrl = await uploadPdf(blob, fileName);
+    if (!pdfUrl) triggerDownload(blob, fileName);
     const message = buildMessage(quoteNo, pdfUrl, !pdfUrl);
 
     if (channel === 'whatsapp') {
@@ -151,9 +184,9 @@ const Collection = () => {
   };
 
   const onWhatsApp = () => {
-    // Pre-open the WhatsApp tab synchronously (popup blockers); we redirect it to
-    // wa.me once the PDF has uploaded.
-    const win = window.open('about:blank', '_blank');
+    // Only pre-open a tab if we'll fall back to wa.me (desktop). On iPad/phones
+    // the native share sheet is used, so no blank tab is opened.
+    const win = canFileShareNow() ? null : window.open('about:blank', '_blank');
     shareQuote('whatsapp', win);
   };
 
