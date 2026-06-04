@@ -60,12 +60,18 @@ const request = async (path, { method = 'GET', body } = {}) => {
   }
 
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    // Try to read a JSON error body. If the response isn't JSON (e.g. the dev
+    // server's 404 or SPA index.html fallback), the endpoint isn't a working
+    // API — surface that as ApiUnavailable so callers can fall back to local
+    // seed data instead of showing a raw "Request failed (404)" to the user.
+    let data;
     try {
-      const data = await parseJson(res);
-      if (data?.error) message = data.error;
-    } catch { /* keep default */ }
-    throw new ApiError(res.status, message);
+      data = await parseJson(res);
+    } catch (e) {
+      if (e instanceof ApiUnavailable) throw e;
+      throw new ApiError(res.status, `Request failed (${res.status})`);
+    }
+    throw new ApiError(res.status, data?.error || `Request failed (${res.status})`);
   }
 
   return parseJson(res);

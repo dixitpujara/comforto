@@ -3,7 +3,7 @@
 // All admin edits (products, categories, materials, room types, users) are
 // stored here so every visitor — on any device — sees the same live data.
 // The very first read seeds KV from the bundled seed files in src/data.
-import { kv } from '@vercel/kv';
+import { kv } from './kv.js';
 import { productsData } from '../../src/data/products.js';
 import { staff } from '../../src/data/staff.js';
 

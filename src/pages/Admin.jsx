@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Plus, Trash2, Edit2, Save, X, Download, Upload, RotateCcw, AlertCircle, Eye, Users as UsersIcon, Eye as EyeIcon, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, X, Download, Upload, RotateCcw, AlertCircle, Eye, Users as UsersIcon, Eye as EyeIcon, EyeOff, ImagePlus } from 'lucide-react';
 import { useProducts } from '../context/ProductsContext';
 import { useUsers } from '../context/UsersContext';
 import { useAuth } from '../context/AuthContext';
@@ -286,7 +286,7 @@ const ProductForm = ({ value, onChange, onSave, onCancel, isNew }) => {
         </Field>
 
         <Field label="Main image URL" wide>
-          <input className="admin-input" value={value.image} onChange={e => patch({ image: e.target.value })} placeholder="https://..." />
+          <ImageInput value={value.image} onChange={url => patch({ image: url })} />
         </Field>
 
         <Field label="Description" wide>
@@ -303,7 +303,7 @@ const ProductForm = ({ value, onChange, onSave, onCancel, isNew }) => {
         {value.gallery.length === 0 && <p className="muted small">No gallery images. The main image will be used.</p>}
         {value.gallery.map((g, i) => (
           <div key={i} className="admin-inline-row">
-            <input className="admin-input" value={g} placeholder="https://..." onChange={e => setGalleryAt(i, e.target.value)} />
+            <ImageInput value={g} onChange={url => setGalleryAt(i, url)} />
             <button className="btn btn-ghost btn-small" onClick={() => removeGalleryAt(i)}><Trash2 size={14} /></button>
           </div>
         ))}
@@ -346,11 +346,10 @@ const ProductForm = ({ value, onChange, onSave, onCancel, isNew }) => {
               placeholder="Color name"
               onChange={e => setVariant(i, { colorName: e.target.value })}
             />
-            <input
-              className="admin-input"
+            <ImageInput
               value={v.image}
               placeholder="Image URL (shown when this swatch is selected)"
-              onChange={e => setVariant(i, { image: e.target.value })}
+              onChange={url => setVariant(i, { image: url })}
             />
             <button className="btn btn-ghost btn-small" onClick={() => removeVariant(i)}><Trash2 size={14} /></button>
           </div>
@@ -366,6 +365,47 @@ const Field = ({ label, children, wide }) => (
     {children}
   </label>
 );
+
+/* A URL text input paired with a "Browse" button that lets the user pick an
+   image file from their computer. The chosen file is read as a data URL and
+   stored in the same string field, so it works without an upload server. */
+const ImageInput = ({ value, onChange, placeholder = 'https://...' }) => {
+  const fileRef = useRef(null);
+
+  const onPick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please choose an image file.');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => onChange(String(reader.result));
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  return (
+    <div className="admin-image-input">
+      <input
+        className="admin-input"
+        value={value}
+        placeholder={placeholder}
+        onChange={e => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        className="btn btn-ghost btn-small"
+        onClick={() => fileRef.current?.click()}
+        title="Choose an image from your computer"
+      >
+        <ImagePlus size={14} /> Browse
+      </button>
+      <input ref={fileRef} type="file" accept="image/*" onChange={onPick} hidden />
+    </div>
+  );
+};
 
 /* ────────────────────────── Taxonomy Admin ────────────────────────── */
 
