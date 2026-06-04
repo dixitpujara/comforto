@@ -71,6 +71,26 @@ export const CollectionProvider = ({ children }) => {
     });
   };
 
+  // Add a one-off custom line (photo from the device gallery + name + price)
+  // that isn't tied to a catalog product. Always added as a new row.
+  const addCustomItem = ({ name, rate, image, qty } = {}) => {
+    setState(s => {
+      const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const newItem = {
+        id: `cu-${stamp}`,
+        productId: `custom-${stamp}`,
+        name: (name || 'Custom item').trim() || 'Custom item',
+        category: 'Custom',
+        subtitle: '',
+        image: image || '',
+        qty: Math.max(1, Number(qty) || 1),
+        rate: Math.max(0, Number(rate) || 0),
+        remarks: ''
+      };
+      return { ...s, items: [...s.items, newItem] };
+    });
+  };
+
   const updateItem = (id, patch) => {
     setState(s => ({
       ...s,
@@ -98,7 +118,7 @@ export const CollectionProvider = ({ children }) => {
       notes:    state.notes,
       subtotal,
       count:    state.items.length,
-      addItem, updateItem, removeItem, isInCollection,
+      addItem, addCustomItem, updateItem, removeItem, isInCollection,
       updateCustomer, updateNotes, clearCollection
     }}>
       {children}
