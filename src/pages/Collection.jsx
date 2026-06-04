@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus } from 'lucide-react';
 import { useCollection } from '../context/CollectionContext';
 import { downloadQuotationPdf, quotationPdfFile } from '../utils/quotationPdf';
+import { apiPost } from '../api/client';
 import SafeImage from '../components/SafeImage';
 import '../assets/css/Collection.css';
 
@@ -72,13 +73,47 @@ const Collection = () => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // Generate the PDF, then try to share it as a real attachment via the native
-  // share sheet (WhatsApp / Email both receive the file). Falls back to a
-  // download + prefilled message on browsers without Web Share file support.
-  const shareQuote = async (channel, fallbackWin) => {
-    // Reuse the file prepared in the background if it matches the current quote
-    // (keeps the user-activation window alive so the share sheet can attach the
-    // PDF). Otherwise build it now.
+  // Build the customer message. When the PDF is hosted (uploaded to Blob) the
+  // message carries a tap-to-download link, so WhatsApp/email open directly with
+  // the message AND the PDF together — no app-picker share sheet.
+  const buildMessage = (quoteNo, pdfUrl, downloaded) => {
+    const lines = [
+      `Hello ${customer.name || ''},`,
+      ``,
+      `Thank you for choosing Comforto Furniture. Here is your quotation ${quoteNo} for ${customer.projectName || 'your project'}.`,
+      `Total: ${formatINR(grandTotal)}  ·  Valid for 15 days.`,
+    ];
+    if (pdfUrl) {
+      lines.push(``, `Download your quotation PDF:`, pdfUrl);
+    } else if (downloaded) {
+      lines.push(``, `(The PDF has been downloaded to this device — please attach it.)`);
+    }
+    lines.push(``, `Warm regards,`, `Comforto Furniture · Bopal, Ahmedabad`, `+91 94299 18571`);
+    return lines.join('\n');
+  };
+
+  // Upload the PDF and return a public URL, or null if upload isn't available
+  // (local dev without the API, or no Blob store connected on Vercel).
+  const uploadPdf = async (blob, fileName) => {
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(',')[1] || '');
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      const resp = await apiPost('/api/upload-quote', { data: base64, fileName });
+      return resp?.url || null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Generate the PDF, upload it for a shareable link, then open WhatsApp / email
+  // DIRECTLY (wa.me / mailto) with the message + PDF link — no share sheet. If
+  // the upload isn't available, download the PDF and note it in the message.
+  const shareQuote = async (channel, targetWin) => {
+    // Reuse the file prepared in the background if it matches the current quote.
     let pdf = null;
     try {
       const prepared = preparedRef.current;
@@ -89,49 +124,35 @@ const Collection = () => {
       pdf = null;
     }
     if (!pdf) {
-      if (fallbackWin) fallbackWin.close();
+      if (targetWin) targetWin.close();
       alert('Could not generate the PDF. Please try again.');
       return;
     }
-    const { file, blob, fileName, quoteNo } = pdf;
+    const { blob, fileName, quoteNo } = pdf;
     setGeneratedQuote(quoteNo);
 
-    const text = `Hello ${customer.name || ''},\n\nThank you for choosing Comforto Furniture. Please find your quotation ${quoteNo} for ${customer.projectName || 'your project'} (Total: ${formatINR(grandTotal)}) attached.\n\n— Comforto Furniture, Bopal`;
+    const pdfUrl = await uploadPdf(blob, fileName);
+    if (!pdfUrl) triggerDownload(blob, fileName); // no link → at least hand over the file
 
-    // Primary path: native share sheet with the PDF actually attached.
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: `Quotation ${quoteNo} · Comforto Furniture`, text });
-        if (fallbackWin) fallbackWin.close();
-        return;
-      } catch (err) {
-        if (err && err.name === 'AbortError') { if (fallbackWin) fallbackWin.close(); return; }
-        // Any other error → fall through to the download + link fallback.
-      }
-    }
-
-    // Fallback: download the PDF and open the channel with a prefilled message.
-    triggerDownload(blob, fileName);
+    const message = buildMessage(quoteNo, pdfUrl, !pdfUrl);
 
     if (channel === 'whatsapp') {
       const phone = (customer.mobile || '').replace(/\D/g, '');
-      const waText = `${text}\n\n(The PDF has been downloaded — please attach it to this chat.)`;
       const url = phone
-        ? `https://wa.me/91${phone}?text=${encodeURIComponent(waText)}`
-        : `https://wa.me/?text=${encodeURIComponent(waText)}`;
-      if (fallbackWin) fallbackWin.location.href = url;
+        ? `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`
+        : `https://wa.me/?text=${encodeURIComponent(message)}`;
+      if (targetWin) targetWin.location.href = url;
       else window.open(url, '_blank');
     } else {
-      if (fallbackWin) fallbackWin.close();
+      if (targetWin) targetWin.close();
       const subject = `Quotation ${quoteNo} from Comforto Furniture`;
-      const body = `Dear ${customer.name || 'Customer'},\n\nPlease find attached the quotation ${quoteNo} for ${customer.projectName || 'your project'}.\n\nTotal: ${formatINR(grandTotal)}\nValid for 15 days.\n\n(The PDF has been downloaded — please attach it before sending.)\n\nWarm regards,\nComforto Furniture\nBopal, Ahmedabad\n+91 94299 18571`;
-      window.location.href = `mailto:${customer.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = `mailto:${customer.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
     }
   };
 
   const onWhatsApp = () => {
-    // Open the fallback tab synchronously to preserve the user-gesture context
-    // (popup blockers). It's closed again if native file-sharing is used instead.
+    // Pre-open the WhatsApp tab synchronously (popup blockers); we redirect it to
+    // wa.me once the PDF has uploaded.
     const win = window.open('about:blank', '_blank');
     shareQuote('whatsapp', win);
   };
