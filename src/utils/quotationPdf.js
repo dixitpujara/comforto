@@ -10,7 +10,7 @@ const COMPANY = {
   tagline: 'Crafted for enduring quality',
   address: 'Bopal, Ahmedabad, Gujarat, India',
   hours: 'Mon–Sun · 10:30 AM to 8:30 PM',
-  phone: '+91 99099 48203',
+  phone: '+91 94299 18571',
   email: 'hello@comforto.in',
   gst: '24XXXXXXXXXXXXX'
 };
@@ -24,7 +24,6 @@ const MUTED       = [120, 110, 100];
 const SOFT        = [228, 215, 188];
 const PAPER       = [250, 246, 239];
 const WHITE       = [255, 255, 255];
-const HEADER_DIM  = [180, 170, 155];
 
 // Load a remote image URL into a square JPEG data URL via canvas (cover-crop).
 // Returns null on failure (CORS, network, etc.) so the PDF falls back gracefully.
@@ -72,54 +71,74 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   const dateStr  = fmtDate(today);
   const validity = fmtDate(new Date(today.getTime() + 15 * 86400000));
 
+  // Paint a horizontal gold gradient (ACCENT -> ACCENT_DARK) as thin strips,
+  // mirroring the gradient used for buttons/accents on the website.
+  const goldGradient = (gx, gy, gw, gh) => {
+    const steps = Math.max(24, Math.ceil(gw / 4));
+    for (let i = 0; i < steps; i++) {
+      const t = i / (steps - 1);
+      const r = Math.round(ACCENT[0] + (ACCENT_DARK[0] - ACCENT[0]) * t);
+      const g = Math.round(ACCENT[1] + (ACCENT_DARK[1] - ACCENT[1]) * t);
+      const b = Math.round(ACCENT[2] + (ACCENT_DARK[2] - ACCENT[2]) * t);
+      doc.setFillColor(r, g, b);
+      doc.rect(gx + (gw * i) / steps, gy, gw / steps + 0.6, gh, 'F');
+    }
+  };
+
   // ─── HEADER BAND ───────────────────────────────────────────────
-  doc.setFillColor(...DARK);
-  doc.rect(0, 0, pageW, 110, 'F');
+  // Light ivory header with gold accents (matches the website theme).
+  const headerH = 110;
+  doc.setFillColor(...PAPER);
+  doc.rect(0, 0, pageW, headerH, 'F');
 
-  // Double gold stripe (thick + thin with a thin gap)
-  doc.setFillColor(...ACCENT);
-  doc.rect(0, 110, pageW, 3, 'F');
-  doc.setFillColor(...ACCENT);
-  doc.rect(0, 116, pageW, 0.7, 'F');
+  // Slim gold gradient accent along the very top edge
+  goldGradient(0, 0, pageW, 4);
 
-  // Monogram: thin gold ring around a solid gold disc
-  doc.setDrawColor(...ACCENT);
-  doc.setLineWidth(0.7);
-  doc.circle(margin + 22, 54, 25, 'S');
+  // Gold gradient base border under the header (thick + thin hairline)
+  goldGradient(0, headerH, pageW, 3);
+  doc.setFillColor(...ACCENT);
+  doc.rect(0, headerH + 5, pageW, 0.6, 'F');
+
+  // Monogram: solid gold disc with a thin deeper-gold ring, white "C"
   doc.setFillColor(...ACCENT);
   doc.circle(margin + 22, 54, 21, 'F');
-  doc.setTextColor(...DARK);
+  doc.setDrawColor(...ACCENT_DARK);
+  doc.setLineWidth(0.9);
+  doc.circle(margin + 22, 54, 24, 'S');
+  doc.setTextColor(...WHITE);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
   doc.text('C', margin + 15, 62);
 
-  // Brand block
+  // Brand block (dark text on the light header)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(22);
-  doc.setTextColor(...WHITE);
+  doc.setTextColor(...DARK);
   doc.text(COMPANY.name, margin + 60, 50);
   doc.setFontSize(8);
-  doc.setTextColor(...ACCENT);
+  doc.setTextColor(...ACCENT_DARK);
   doc.text(COMPANY.tagline.toUpperCase(), margin + 60, 64);
   doc.setFontSize(8);
-  doc.setTextColor(...HEADER_DIM);
+  doc.setTextColor(...MUTED);
   doc.text(`${COMPANY.address}  ·  ${COMPANY.phone}  ·  ${COMPANY.email}`, margin + 60, 82);
 
   // Quotation meta block (right) — gold-bullet rows
   const rightX = pageW - margin;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.setTextColor(...ACCENT);
+  doc.setTextColor(...ACCENT_DARK);
   doc.text('QUOTATION', rightX, 36, { align: 'right' });
 
   const metaRow = (label, value, ly) => {
     doc.setFillColor(...ACCENT);
     doc.circle(rightX - 118, ly - 2.5, 1.3, 'F');
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.setTextColor(...HEADER_DIM);
+    doc.setTextColor(...MUTED);
     doc.text(label.toUpperCase(), rightX - 110, ly);
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.setTextColor(...WHITE);
+    doc.setTextColor(...DARK);
     doc.text(value, rightX, ly, { align: 'right' });
   };
   metaRow('Quote No.',  quoteNo,  56);
@@ -254,7 +273,7 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
       valign: 'middle'
     },
     headStyles: {
-      fillColor: DARK,
+      fillColor: ACCENT_DARK,
       textColor: WHITE,
       fontStyle: 'bold',
       fontSize: 8.5,
@@ -282,10 +301,10 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
       }
     },
     didDrawCell: (data) => {
-      // Gold accent line under header row (drawn once, when last header cell renders)
+      // Thin hairline under the gold header row (drawn once, with the last header cell)
       if (data.section === 'head' && data.column.index === data.table.columns.length - 1) {
         doc.setDrawColor(...ACCENT);
-        doc.setLineWidth(1.2);
+        doc.setLineWidth(0.5);
         const tableLeft = data.table.settings.margin.left;
         const tableRight = pageW - data.table.settings.margin.right;
         const lineY = data.cell.y + data.cell.height;
@@ -372,16 +391,16 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   doc.line(cardX + 16, ty - 6, cardX + cardW - 16, ty - 6);
   ty += 4;
 
-  // Grand total inset band — dark with gold label
+  // Grand total inset band — gold (mirrors the website's gold gradient buttons)
   const bandPadX = 8;
   const bandX = cardX + bandPadX;
   const bandW = cardW - bandPadX * 2;
   const bandH = 36;
-  doc.setFillColor(...DARK);
+  doc.setFillColor(...ACCENT_DARK);
   doc.roundedRect(bandX, ty, bandW, bandH, 3, 3, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.setTextColor(...ACCENT);
+  doc.setTextColor(...WHITE);
   doc.text('TOTAL DUE', bandX + 14, ty + 15);
   doc.setFontSize(13);
   doc.setTextColor(...WHITE);
@@ -517,4 +536,15 @@ export async function quotationPdfBlob(args) {
   const { doc, quoteNo, grandTotal } = await buildQuotationPdf(args);
   const blob = doc.output('blob');
   return { blob, quoteNo, grandTotal };
+}
+
+// Build the quotation as a File so it can be attached via the Web Share API
+// (native share sheet → WhatsApp, Email, etc.) or downloaded as a fallback.
+export async function quotationPdfFile(args) {
+  const { doc, quoteNo, grandTotal } = await buildQuotationPdf(args);
+  const safeName = (args.customer.name || 'customer').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  const fileName = `Comforto-Quote-${safeName}-${quoteNo}.pdf`;
+  const blob = doc.output('blob');
+  const file = new File([blob], fileName, { type: 'application/pdf' });
+  return { file, blob, fileName, quoteNo, grandTotal };
 }

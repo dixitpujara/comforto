@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus } from 'lucide-react';
 import { useCollection } from '../context/CollectionContext';
-import { downloadQuotationPdf, quotationPdfBlob } from '../utils/quotationPdf';
+import { downloadQuotationPdf, quotationPdfFile } from '../utils/quotationPdf';
 import SafeImage from '../components/SafeImage';
 import '../assets/css/Collection.css';
 
@@ -22,6 +22,11 @@ const Collection = () => {
   const taxAmount  = taxable * (Number(taxPercent || 0) / 100);
   const grandTotal = taxable + taxAmount;
 
+  // Show an empty field (not a stuck "0") so typing starts fresh; select the
+  // current value on focus so a keystroke overwrites it instead of prepending.
+  const showNum = (n) => (Number(n) === 0 ? '' : n);
+  const selectAll = (e) => e.target.select();
+
   const args = useMemo(() => ({
     items, customer, notes,
     totals: { discount: Number(discount) || 0, taxPercent: Number(taxPercent) || 0 }
@@ -29,33 +34,109 @@ const Collection = () => {
 
   const canGenerate = items.length > 0 && customer.name.trim().length > 0;
 
+  // A stable signature of the current quote so we can tell whether a
+  // previously prepared PDF is still up to date.
+  const argsKey = useMemo(() => JSON.stringify(args), [args]);
+
+  // Pre-build the PDF in the background whenever the quote is valid. Embedding
+  // product thumbnails is slow (each image is fetched), and the browser only
+  // permits navigator.share() for a few seconds after a tap. By having the file
+  // ready in advance, the WhatsApp/Email tap can share it instantly — within
+  // that activation window — so the PDF actually attaches instead of falling
+  // back to "attach manually".
+  const preparedRef = useRef(null);
+  useEffect(() => {
+    if (!canGenerate) { preparedRef.current = null; return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      if (cancelled) return;
+      preparedRef.current = { key: argsKey, promise: quotationPdfFile(args).catch(() => null) };
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [argsKey, canGenerate, args]);
+
   const onDownload = async () => {
     const quoteNo = await downloadQuotationPdf(args);
     setGeneratedQuote(quoteNo);
   };
 
-  const onWhatsApp = async () => {
-    // Open the WhatsApp tab synchronously to keep the user-gesture context;
-    // we'll redirect it once the PDF (async image preload) is ready.
-    const win = window.open('about:blank', '_blank');
-    const quoteNo = await downloadQuotationPdf(args);
-    setGeneratedQuote(quoteNo);
-    const phone = (customer.mobile || '').replace(/\D/g, '');
-    const text = `Hello ${customer.name || ''},\n\nThank you for visiting Comforto Furniture.\nPlease find attached your quotation ${quoteNo} for ${customer.projectName || 'your project'} (Total: ${formatINR(grandTotal)}).\n\nThe PDF has been downloaded — please attach it to this chat.\n\n— Comforto Furniture, Bopal`;
-    const url = phone
-      ? `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`
-      : `https://wa.me/?text=${encodeURIComponent(text)}`;
-    if (win) win.location.href = url;
-    else window.open(url, '_blank');
+  // Force-download a generated blob (fallback when the device can't share files).
+  const triggerDownload = (blob, fileName) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const onEmail = async () => {
-    const quoteNo = await downloadQuotationPdf(args);
+  // Generate the PDF, then try to share it as a real attachment via the native
+  // share sheet (WhatsApp / Email both receive the file). Falls back to a
+  // download + prefilled message on browsers without Web Share file support.
+  const shareQuote = async (channel, fallbackWin) => {
+    // Reuse the file prepared in the background if it matches the current quote
+    // (keeps the user-activation window alive so the share sheet can attach the
+    // PDF). Otherwise build it now.
+    let pdf = null;
+    try {
+      const prepared = preparedRef.current;
+      pdf = (prepared && prepared.key === argsKey)
+        ? await prepared.promise
+        : await quotationPdfFile(args);
+    } catch {
+      pdf = null;
+    }
+    if (!pdf) {
+      if (fallbackWin) fallbackWin.close();
+      alert('Could not generate the PDF. Please try again.');
+      return;
+    }
+    const { file, blob, fileName, quoteNo } = pdf;
     setGeneratedQuote(quoteNo);
-    const subject = `Quotation ${quoteNo} from Comforto Furniture`;
-    const body = `Dear ${customer.name || 'Customer'},\n\nPlease find attached the quotation ${quoteNo} for ${customer.projectName || 'your project'}.\n\nTotal: ${formatINR(grandTotal)}\nValid for 15 days.\n\nThe PDF has been downloaded — please attach it before sending.\n\nWarm regards,\nComforto Furniture\nBopal, Ahmedabad\n+91 99099 48203`;
-    window.location.href = `mailto:${customer.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    const text = `Hello ${customer.name || ''},\n\nThank you for choosing Comforto Furniture. Please find your quotation ${quoteNo} for ${customer.projectName || 'your project'} (Total: ${formatINR(grandTotal)}) attached.\n\n— Comforto Furniture, Bopal`;
+
+    // Primary path: native share sheet with the PDF actually attached.
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: `Quotation ${quoteNo} · Comforto Furniture`, text });
+        if (fallbackWin) fallbackWin.close();
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') { if (fallbackWin) fallbackWin.close(); return; }
+        // Any other error → fall through to the download + link fallback.
+      }
+    }
+
+    // Fallback: download the PDF and open the channel with a prefilled message.
+    triggerDownload(blob, fileName);
+
+    if (channel === 'whatsapp') {
+      const phone = (customer.mobile || '').replace(/\D/g, '');
+      const waText = `${text}\n\n(The PDF has been downloaded — please attach it to this chat.)`;
+      const url = phone
+        ? `https://wa.me/91${phone}?text=${encodeURIComponent(waText)}`
+        : `https://wa.me/?text=${encodeURIComponent(waText)}`;
+      if (fallbackWin) fallbackWin.location.href = url;
+      else window.open(url, '_blank');
+    } else {
+      if (fallbackWin) fallbackWin.close();
+      const subject = `Quotation ${quoteNo} from Comforto Furniture`;
+      const body = `Dear ${customer.name || 'Customer'},\n\nPlease find attached the quotation ${quoteNo} for ${customer.projectName || 'your project'}.\n\nTotal: ${formatINR(grandTotal)}\nValid for 15 days.\n\n(The PDF has been downloaded — please attach it before sending.)\n\nWarm regards,\nComforto Furniture\nBopal, Ahmedabad\n+91 94299 18571`;
+      window.location.href = `mailto:${customer.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
   };
+
+  const onWhatsApp = () => {
+    // Open the fallback tab synchronously to preserve the user-gesture context
+    // (popup blockers). It's closed again if native file-sharing is used instead.
+    const win = window.open('about:blank', '_blank');
+    shareQuote('whatsapp', win);
+  };
+
+  const onEmail = () => shareQuote('email');
 
   const adjustQty = (id, delta) => {
     const it = items.find(i => i.id === id);
@@ -124,13 +205,13 @@ const Collection = () => {
                         <td>
                           <div className="qty-stepper">
                             <button onClick={() => adjustQty(it.id, -1)}><Minus size={12} /></button>
-                            <input type="number" min={1} value={it.qty}
+                            <input type="number" min={1} value={it.qty} onFocus={selectAll}
                               onChange={(e) => updateItem(it.id, { qty: Math.max(1, Number(e.target.value) || 1) })} />
                             <button onClick={() => adjustQty(it.id, +1)}><Plus size={12} /></button>
                           </div>
                         </td>
                         <td>
-                          <input type="number" min={0} value={it.rate}
+                          <input type="number" min={0} value={showNum(it.rate)} placeholder="0" onFocus={selectAll}
                             onChange={(e) => updateItem(it.id, { rate: Math.max(0, Number(e.target.value) || 0) })}
                             className="ctable-input" />
                         </td>
@@ -164,12 +245,12 @@ const Collection = () => {
               <div className="totals-adjust">
                 <label>
                   <span>Discount (₹)</span>
-                  <input type="number" min={0} value={discount}
+                  <input type="number" min={0} value={showNum(discount)} placeholder="0" onFocus={selectAll}
                     onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))} />
                 </label>
                 <label>
                   <span>GST (%)</span>
-                  <input type="number" min={0} max={28} value={taxPercent}
+                  <input type="number" min={0} max={28} value={showNum(taxPercent)} placeholder="0" onFocus={selectAll}
                     onChange={(e) => setTaxPercent(Math.max(0, Math.min(50, Number(e.target.value) || 0)))} />
                 </label>
               </div>

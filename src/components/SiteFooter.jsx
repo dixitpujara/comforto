@@ -37,14 +37,14 @@ const SiteFooter = () => (
               <div className="visit-meta-item">
                 <span className="visit-meta-icon"><Phone size={14} /></span>
                 <div>
-                  <strong>+91 99099 48203</strong>
+                  <strong>+91 94299 18571</strong>
                   <span>WhatsApp &amp; call</span>
                 </div>
               </div>
             </div>
             <div className="visit-actions">
               <a
-                href="https://wa.me/919909948203?text=Hi%20Comforto%2C%20I'd%20like%20to%20visit%20the%20showroom."
+                href="https://wa.me/919429918571?text=Hi%20Comforto%2C%20I'd%20like%20to%20visit%20the%20showroom."
                 target="_blank" rel="noreferrer"
                 className="btn btn-accent"
               >

@@ -233,6 +233,17 @@
   margin-bottom: 0.5rem;
 }
 
+/* URL input + "Browse" button pairing */
+.admin-image-input {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex: 1;
+  width: 100%;
+}
+.admin-image-input .admin-input { flex: 1; min-width: 0; }
+.admin-image-input .btn { flex: none; white-space: nowrap; }
+
 /* ---------- Taxonomy list ---------- */
 .admin-tax-list { list-style: none; padding: 0; margin: 1rem 0 0; }
 .admin-tax-row {
