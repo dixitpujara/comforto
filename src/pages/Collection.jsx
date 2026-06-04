@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus } from 'lucide-react';
+import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus } from 'lucide-react';
 import { useCollection } from '../context/CollectionContext';
 import { downloadQuotationPdf, quotationPdfFile } from '../utils/quotationPdf';
 import { apiPost } from '../api/client';
@@ -12,12 +12,34 @@ const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumF
 const Collection = () => {
   const {
     items, customer, notes, subtotal,
-    updateItem, removeItem, updateCustomer, updateNotes, clearCollection
+    addCustomItem, updateItem, removeItem, updateCustomer, updateNotes, clearCollection
   } = useCollection();
 
   const [discount, setDiscount]       = useState(0);
   const [taxPercent, setTaxPercent]   = useState(18);
   const [generatedQuote, setGeneratedQuote] = useState(null);
+
+  // ── Custom item (photo from gallery + name + price) ──────────────
+  const [customOpen, setCustomOpen] = useState(false);
+  const [custom, setCustom] = useState({ name: '', rate: '', image: '' });
+  const customFileRef = useRef(null);
+
+  const onCustomPhoto = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); e.target.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = () => setCustom(c => ({ ...c, image: String(reader.result) }));
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const submitCustom = () => {
+    if (!custom.name.trim()) { alert('Please enter an item name.'); return; }
+    addCustomItem({ name: custom.name, rate: custom.rate, image: custom.image, qty: 1 });
+    setCustom({ name: '', rate: '', image: '' });
+    setCustomOpen(false);
+  };
 
   const taxable    = Math.max(subtotal - Number(discount || 0), 0);
   const taxAmount  = taxable * (Number(taxPercent || 0) / 100);
@@ -207,12 +229,50 @@ const Collection = () => {
           <h1 className="section-title">Create Collection</h1>
           <p>Curate products and generate a branded quotation PDF for your customer.</p>
         </div>
-        {items.length > 0 && (
-          <button className="btn btn-ghost" onClick={() => { if (confirm('Clear collection and customer info?')) clearCollection(); }}>
-            <Trash2 size={16} /> Clear all
+        <div className="collection-head-actions">
+          <button className="btn btn-primary" onClick={() => setCustomOpen(true)}>
+            <Plus size={16} /> Add custom item
           </button>
-        )}
+          {items.length > 0 && (
+            <button className="btn btn-ghost" onClick={() => { if (confirm('Clear collection and customer info?')) clearCollection(); }}>
+              <Trash2 size={16} /> Clear all
+            </button>
+          )}
+        </div>
       </div>
+
+      {customOpen && (
+        <div className="ci-modal-backdrop" onClick={() => setCustomOpen(false)}>
+          <div className="ci-modal" onClick={e => e.stopPropagation()}>
+            <h3 className="ci-modal-title">Add custom item</h3>
+            <div className="ci-photo">
+              {custom.image
+                ? <img src={custom.image} alt="Selected" className="ci-photo-preview" />
+                : <div className="ci-photo-empty"><ImagePlus size={26} /></div>}
+              <button type="button" className="btn btn-ghost btn-small" onClick={() => customFileRef.current?.click()}>
+                <ImagePlus size={14} /> {custom.image ? 'Change photo' : 'Select photo from gallery'}
+              </button>
+              <input ref={customFileRef} type="file" accept="image/*" hidden onChange={onCustomPhoto} />
+            </div>
+            <label className="ci-field">
+              <span>Name</span>
+              <input type="text" value={custom.name} autoFocus
+                onChange={e => setCustom(c => ({ ...c, name: e.target.value }))}
+                placeholder="e.g. Custom Wardrobe" />
+            </label>
+            <label className="ci-field">
+              <span>Price (₹)</span>
+              <input type="number" min={0} value={custom.rate} onFocus={selectAll}
+                onChange={e => setCustom(c => ({ ...c, rate: e.target.value }))}
+                placeholder="0" />
+            </label>
+            <div className="ci-actions">
+              <button className="btn btn-ghost" onClick={() => setCustomOpen(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={submitCustom}>Add to collection</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="empty-state empty-state-rich">
