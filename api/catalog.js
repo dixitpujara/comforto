@@ -19,6 +19,7 @@ export default async function handler(req, res) {
       }
       const saved = await setCatalog({
         categories: body.categories || [],
+        subcategories: body.subcategories || {},
         materials: body.materials || [],
         roomTypes: body.roomTypes || [],
         tags: body.tags || [],

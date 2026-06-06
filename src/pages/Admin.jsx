@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Plus, Trash2, Edit2, Save, X, Download, Upload, RotateCcw, AlertCircle, Eye, Users as UsersIcon, Eye as EyeIcon, EyeOff, ImagePlus } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, X, Download, Upload, RotateCcw, AlertCircle, Eye, Users as UsersIcon, Eye as EyeIcon, EyeOff, ImagePlus, ChevronUp, ChevronDown } from 'lucide-react';
 import { useProducts } from '../context/ProductsContext';
 import { useUsers } from '../context/UsersContext';
 import { useAuth } from '../context/AuthContext';
@@ -59,7 +59,7 @@ const Admin = () => {
 
       <div className="admin-body">
         {tab === 'products'   && <ProductsAdmin />}
-        {tab === 'categories' && <TaxonomyAdmin kind="categories" singular="category" label="Categories" />}
+        {tab === 'categories' && <TaxonomyAdmin kind="categories" singular="category" label="Categories" enableSubcategories />}
         {tab === 'materials'  && <TaxonomyAdmin kind="materials"  singular="material" label="Materials" />}
         {tab === 'roomTypes'  && <TaxonomyAdmin kind="roomTypes"  singular="room type" label="Room Types" />}
         {tab === 'users'      && isAdmin && <UsersAdmin />}
@@ -75,6 +75,7 @@ const blankProduct = (draft) => ({
   id: '',
   name: '',
   category:     draft.categories[0] || '',
+  subcategory:  '',
   subtitle:     '',
   tag:          draft.tags[0] || '',
   material:     draft.materials[0] || '',
@@ -88,7 +89,7 @@ const blankProduct = (draft) => ({
 });
 
 const ProductsAdmin = () => {
-  const { products, draft, addProduct, updateProduct, deleteProduct } = useProducts();
+  const { products, draft, addProduct, updateProduct, deleteProduct, moveProduct } = useProducts();
   const [editingId, setEditingId] = useState(null);
   const [draftItem, setDraftItem] = useState(null);
   const [filter, setFilter] = useState('');
@@ -163,14 +164,37 @@ const ProductsAdmin = () => {
       )}
 
       <div className="admin-products">
+        {filter && (
+          <p className="muted small">Clear the search to reorder products.</p>
+        )}
         {filtered.length === 0 ? (
           <div className="admin-empty">No products match.</div>
-        ) : filtered.map(p => (
+        ) : filtered.map((p, i) => (
           <article key={p.id} className="admin-product-row">
+            <div className="admin-reorder">
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={() => moveProduct(p.id, -1)}
+                disabled={!!editingId || !!filter || i === 0}
+                title="Move up"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={() => moveProduct(p.id, +1)}
+                disabled={!!editingId || !!filter || i === filtered.length - 1}
+                title="Move down"
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
             <SafeImage src={p.image} alt={p.name} className="admin-product-img" />
             <div className="admin-product-info">
               <h3>{p.name}</h3>
-              <span className="muted">{p.category} · {p.material} · {p.roomType}</span>
+              <span className="muted">
+                {p.category}{p.subcategory ? ` › ${p.subcategory}` : ''} · {p.material} · {p.roomType}
+              </span>
               <span className="muted small">{p.variants.length} variant{p.variants.length === 1 ? '' : 's'}</span>
             </div>
             <div className="admin-product-actions">
@@ -195,6 +219,7 @@ const ProductsAdmin = () => {
 
 const ProductForm = ({ value, onChange, onSave, onCancel, isNew }) => {
   const { draft } = useProducts();
+  const subOptions = (draft.subcategories && draft.subcategories[value.category]) || [];
 
   const patch = (p) => onChange({ ...value, ...p });
 
@@ -255,8 +280,20 @@ const ProductForm = ({ value, onChange, onSave, onCancel, isNew }) => {
         </Field>
 
         <Field label="Category">
-          <select className="admin-input" value={value.category} onChange={e => patch({ category: e.target.value })}>
+          <select className="admin-input" value={value.category} onChange={e => patch({ category: e.target.value, subcategory: '' })}>
             {draft.categories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
+
+        <Field label="Subcategory">
+          <select
+            className="admin-input"
+            value={value.subcategory || ''}
+            onChange={e => patch({ subcategory: e.target.value })}
+            disabled={subOptions.length === 0}
+          >
+            <option value="">(none)</option>
+            {subOptions.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
 
@@ -409,11 +446,12 @@ const ImageInput = ({ value, onChange, placeholder = 'https://...' }) => {
 
 /* ────────────────────────── Taxonomy Admin ────────────────────────── */
 
-const TaxonomyAdmin = ({ kind, singular, label }) => {
-  const { draft, addTaxonomyValue, renameTaxonomyValue, deleteTaxonomyValue, taxonomyUsageCount } = useProducts();
+const TaxonomyAdmin = ({ kind, singular, label, enableSubcategories }) => {
+  const { draft, addTaxonomyValue, renameTaxonomyValue, deleteTaxonomyValue, taxonomyUsageCount, moveTaxonomyValue } = useProducts();
   const values = draft[kind] || [];
   const [newValue, setNewValue] = useState('');
   const [renameMap, setRenameMap] = useState({}); // { oldValue: editingNewValue }
+  const [expanded, setExpanded] = useState(null);  // category whose subcategories are open
 
   const startRename = (v) => setRenameMap({ ...renameMap, [v]: v });
   const cancelRename = (v) => {
@@ -459,38 +497,137 @@ const TaxonomyAdmin = ({ kind, singular, label }) => {
       </div>
 
       <ul className="admin-tax-list">
-        {values.map(v => {
+        {values.map((v, i) => {
           const count = taxonomyUsageCount(kind, v);
           const renaming = renameMap[v] !== undefined;
+          const isOpen = expanded === v;
           return (
-            <li key={v} className="admin-tax-row">
-              {renaming ? (
-                <>
-                  <input
-                    className="admin-input"
-                    value={renameMap[v]}
-                    onChange={e => setRenameMap({ ...renameMap, [v]: e.target.value })}
-                    onKeyDown={e => e.key === 'Enter' && commitRename(v)}
-                    autoFocus
-                  />
-                  <button className="btn btn-primary btn-small" onClick={() => commitRename(v)}><Save size={14} /></button>
-                  <button className="btn btn-ghost btn-small" onClick={() => cancelRename(v)}><X size={14} /></button>
-                </>
-              ) : (
-                <>
-                  <span className="admin-tax-name">{v}</span>
-                  <span className="admin-tax-count">{count} product{count === 1 ? '' : 's'}</span>
-                  <button className="btn btn-ghost btn-small" onClick={() => startRename(v)}><Edit2 size={14} /></button>
-                  <button className="btn btn-danger btn-small" onClick={() => tryDelete(v)} disabled={count > 0} title={count > 0 ? 'In use' : 'Delete'}>
-                    <Trash2 size={14} />
-                  </button>
-                </>
-              )}
+            <li key={v} className="admin-tax-item">
+              <div className="admin-tax-row">
+                {renaming ? (
+                  <>
+                    <input
+                      className="admin-input"
+                      value={renameMap[v]}
+                      onChange={e => setRenameMap({ ...renameMap, [v]: e.target.value })}
+                      onKeyDown={e => e.key === 'Enter' && commitRename(v)}
+                      autoFocus
+                    />
+                    <button className="btn btn-primary btn-small" onClick={() => commitRename(v)}><Save size={14} /></button>
+                    <button className="btn btn-ghost btn-small" onClick={() => cancelRename(v)}><X size={14} /></button>
+                  </>
+                ) : (
+                  <>
+                    <span className="admin-tax-name">{v}</span>
+                    <span className="admin-tax-count">{count} product{count === 1 ? '' : 's'}</span>
+                    <div className="admin-reorder admin-reorder-inline">
+                      <button className="btn btn-ghost btn-icon" onClick={() => moveTaxonomyValue(kind, v, -1)} disabled={i === 0} title="Move up"><ChevronUp size={14} /></button>
+                      <button className="btn btn-ghost btn-icon" onClick={() => moveTaxonomyValue(kind, v, +1)} disabled={i === values.length - 1} title="Move down"><ChevronDown size={14} /></button>
+                    </div>
+                    {enableSubcategories && (
+                      <button className="btn btn-ghost btn-small" onClick={() => setExpanded(isOpen ? null : v)} title="Subcategories">
+                        {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Subcategories
+                      </button>
+                    )}
+                    <button className="btn btn-ghost btn-small" onClick={() => startRename(v)}><Edit2 size={14} /></button>
+                    <button className="btn btn-danger btn-small" onClick={() => tryDelete(v)} disabled={count > 0} title={count > 0 ? 'In use' : 'Delete'}>
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+              </div>
+              {enableSubcategories && isOpen && <SubcategoryPanel category={v} />}
             </li>
           );
         })}
         {values.length === 0 && <li className="admin-empty">No entries yet.</li>}
       </ul>
+    </div>
+  );
+};
+
+/* ────────────────────────── Subcategory Panel ────────────────────────── */
+
+const SubcategoryPanel = ({ category }) => {
+  const { subcategories, addSubcategory, renameSubcategory, deleteSubcategory, moveSubcategory, subcategoryUsageCount } = useProducts();
+  const subs = subcategories[category] || [];
+  const [newValue, setNewValue] = useState('');
+  const [renameMap, setRenameMap] = useState({});
+
+  const tryAdd = () => {
+    if (addSubcategory(category, newValue)) setNewValue('');
+  };
+  const startRename = (s) => setRenameMap({ ...renameMap, [s]: s });
+  const cancelRename = (s) => {
+    const { [s]: _, ...rest } = renameMap;
+    setRenameMap(rest);
+  };
+  const commitRename = (s) => {
+    renameSubcategory(category, s, renameMap[s]);
+    cancelRename(s);
+  };
+  const tryDelete = (s) => {
+    const count = subcategoryUsageCount(category, s);
+    if (count > 0) {
+      alert(`Cannot delete "${s}" — it is used by ${count} product${count === 1 ? '' : 's'}. Reassign those products first.`);
+      return;
+    }
+    if (confirm(`Delete subcategory "${s}"?`)) deleteSubcategory(category, s);
+  };
+
+  return (
+    <div className="admin-subcat-panel">
+      <div className="admin-toolbar">
+        <input
+          className="admin-input"
+          placeholder={`New subcategory of ${category}...`}
+          value={newValue}
+          onChange={e => setNewValue(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && tryAdd()}
+        />
+        <button className="btn btn-primary btn-small" onClick={tryAdd}><Plus size={14} /> Add</button>
+      </div>
+
+      {subs.length === 0 ? (
+        <p className="muted small">No subcategories yet.</p>
+      ) : (
+        <ul className="admin-tax-list">
+          {subs.map((s, i) => {
+            const count = subcategoryUsageCount(category, s);
+            const renaming = renameMap[s] !== undefined;
+            return (
+              <li key={s} className="admin-tax-row">
+                {renaming ? (
+                  <>
+                    <input
+                      className="admin-input"
+                      value={renameMap[s]}
+                      onChange={e => setRenameMap({ ...renameMap, [s]: e.target.value })}
+                      onKeyDown={e => e.key === 'Enter' && commitRename(s)}
+                      autoFocus
+                    />
+                    <button className="btn btn-primary btn-small" onClick={() => commitRename(s)}><Save size={14} /></button>
+                    <button className="btn btn-ghost btn-small" onClick={() => cancelRename(s)}><X size={14} /></button>
+                  </>
+                ) : (
+                  <>
+                    <span className="admin-tax-name">{s}</span>
+                    <span className="admin-tax-count">{count} product{count === 1 ? '' : 's'}</span>
+                    <div className="admin-reorder admin-reorder-inline">
+                      <button className="btn btn-ghost btn-icon" onClick={() => moveSubcategory(category, s, -1)} disabled={i === 0} title="Move up"><ChevronUp size={14} /></button>
+                      <button className="btn btn-ghost btn-icon" onClick={() => moveSubcategory(category, s, +1)} disabled={i === subs.length - 1} title="Move down"><ChevronDown size={14} /></button>
+                    </div>
+                    <button className="btn btn-ghost btn-small" onClick={() => startRename(s)}><Edit2 size={14} /></button>
+                    <button className="btn btn-danger btn-small" onClick={() => tryDelete(s)} disabled={count > 0} title={count > 0 ? 'In use' : 'Delete'}>
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 };
