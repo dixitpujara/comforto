@@ -13,7 +13,7 @@ const Navbar = () => {
   const { wishlist } = useWishlist();
   const { compareList } = useCompare();
   const { count: collectionCount } = useCollection();
-  const { rawCategories } = useProducts();
+  const { rawCategories, subcategories } = useProducts();
   const { user, logout, isAuthed } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,15 +50,32 @@ const Navbar = () => {
         </Link>
 
         <nav className="navbar-links">
-          {rawCategories.map(c => (
-            <NavLink
-              key={c}
-              to={`/catalog?category=${encodeURIComponent(c)}`}
-              className="navbar-link"
-            >
-              {c}
-            </NavLink>
-          ))}
+          {rawCategories.map(c => {
+            const subs = subcategories[c] || [];
+            return (
+              <div key={c} className="navbar-link-wrap">
+                <NavLink
+                  to={`/catalog?category=${encodeURIComponent(c)}`}
+                  className="navbar-link"
+                >
+                  {c}
+                </NavLink>
+                {subs.length > 0 && (
+                  <div className="navbar-dropdown">
+                    {subs.map(s => (
+                      <Link
+                        key={s}
+                        to={`/catalog?category=${encodeURIComponent(c)}&subcategory=${encodeURIComponent(s)}`}
+                        className="navbar-dropdown-link"
+                      >
+                        {s}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="navbar-actions">
@@ -154,15 +171,32 @@ const Navbar = () => {
         </form>
 
         <nav className="navbar-mobile-links">
-          {rawCategories.map(c => (
-            <NavLink
-              key={c}
-              to={`/catalog?category=${encodeURIComponent(c)}`}
-              className="navbar-mobile-link"
-            >
-              {c}
-            </NavLink>
-          ))}
+          {rawCategories.map(c => {
+            const subs = subcategories[c] || [];
+            return (
+              <div key={c} className="navbar-mobile-group">
+                <NavLink
+                  to={`/catalog?category=${encodeURIComponent(c)}`}
+                  className="navbar-mobile-link"
+                >
+                  {c}
+                </NavLink>
+                {subs.length > 0 && (
+                  <div className="navbar-mobile-sublinks">
+                    {subs.map(s => (
+                      <NavLink
+                        key={s}
+                        to={`/catalog?category=${encodeURIComponent(c)}&subcategory=${encodeURIComponent(s)}`}
+                        className="navbar-mobile-sublink"
+                      >
+                        {s}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="navbar-mobile-actions">

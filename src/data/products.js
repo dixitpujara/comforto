@@ -14,6 +14,9 @@ export const categoryIcon = {
 
 export const productsData = {
   categories:   ['Sofas', 'Tables', 'Lighting', 'Bedroom', 'Lounge', 'Storage'],
+  // Optional second level under a category, keyed by category name.
+  // e.g. { Sofas: ['2-Seater', '3-Seater'] }
+  subcategories: {},
   materials:    ['Wood', 'Velvet', 'Leather', 'Metal', 'Linen', 'Wool', 'Marble', 'Glass'],
   roomTypes:    ['Living Room', 'Bedroom', 'Dining Room', 'Office', 'Hallway'],
   tags:         ['New', 'Bestseller', 'Popular'],
@@ -447,6 +450,7 @@ export const productsData = {
 
 // Backwards-compatible named exports so existing imports keep working.
 export const products       = productsData.products;
+export const subcategories  = productsData.subcategories || {};
 export const categories     = ['All', ...productsData.categories];
 export const materials      = ['All', ...productsData.materials];
 export const roomTypes      = ['All', ...productsData.roomTypes];

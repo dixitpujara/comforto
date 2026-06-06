@@ -102,6 +102,7 @@ export const ProductsProvider = ({ children }) => {
       id,
       name:         product.name || 'Untitled',
       category:     product.category || draft.categories[0] || '',
+      subcategory:  product.subcategory || '',
       subtitle:     product.subtitle || '',
       tag:          product.tag || (draft.tags?.[0] ?? ''),
       material:     product.material || draft.materials[0] || '',
@@ -128,6 +129,21 @@ export const ProductsProvider = ({ children }) => {
     commit({ ...draft, products: draft.products.filter(p => p.id !== id) });
   };
 
+  // Swap an array entry with its neighbour. `dir` is -1 (up) or +1 (down).
+  const moveInArray = (arr, index, dir) => {
+    const target = index + dir;
+    if (index < 0 || target < 0 || target >= arr.length) return arr;
+    const next = arr.slice();
+    [next[index], next[target]] = [next[target], next[index]];
+    return next;
+  };
+
+  const moveProduct = (id, dir) => {
+    const index = draft.products.findIndex(p => p.id === id);
+    if (index === -1) return;
+    commit({ ...draft, products: moveInArray(draft.products, index, dir) });
+  };
+
   // -- Taxonomy CRUD (categories / materials / roomTypes) --
   // `kind` is one of: 'categories', 'materials', 'roomTypes'
   const addTaxonomyValue = (kind, value) => {
@@ -145,11 +161,17 @@ export const ProductsProvider = ({ children }) => {
     const productField = kind === 'categories' ? 'category'
                       : kind === 'materials'  ? 'material'
                       : 'roomType';
-    commit({
+    const next = {
       ...draft,
       [kind]: (draft[kind] || []).map(x => x === oldValue ? v : x),
       products: draft.products.map(p => p[productField] === oldValue ? { ...p, [productField]: v } : p)
-    });
+    };
+    // Carry the category's subcategory list over to the new name.
+    if (kind === 'categories' && draft.subcategories) {
+      const { [oldValue]: moved, ...rest } = draft.subcategories;
+      if (moved !== undefined) next.subcategories = { ...rest, [v]: moved };
+    }
+    commit(next);
   };
 
   const deleteTaxonomyValue = (kind, value) => {
@@ -161,7 +183,12 @@ export const ProductsProvider = ({ children }) => {
       // Refuse to leave orphaned references — UI is expected to warn first.
       return;
     }
-    commit({ ...draft, [kind]: (draft[kind] || []).filter(x => x !== value) });
+    const next = { ...draft, [kind]: (draft[kind] || []).filter(x => x !== value) };
+    if (kind === 'categories' && draft.subcategories) {
+      const { [value]: _removed, ...rest } = draft.subcategories;
+      next.subcategories = rest;
+    }
+    commit(next);
   };
 
   const taxonomyUsageCount = (kind, value) => {
@@ -170,6 +197,56 @@ export const ProductsProvider = ({ children }) => {
                       : 'roomType';
     return draft.products.filter(p => p[productField] === value).length;
   };
+
+  const moveTaxonomyValue = (kind, value, dir) => {
+    const arr = draft[kind] || [];
+    const index = arr.indexOf(value);
+    if (index === -1) return;
+    commit({ ...draft, [kind]: moveInArray(arr, index, dir) });
+  };
+
+  // -- Subcategory CRUD (nested one level under a category) --
+  const addSubcategory = (category, value) => {
+    const v = (value || '').trim();
+    if (!v) return false;
+    const map = draft.subcategories || {};
+    const list = map[category] || [];
+    if (list.includes(v)) return false;
+    commit({ ...draft, subcategories: { ...map, [category]: [...list, v] } });
+    return true;
+  };
+
+  const renameSubcategory = (category, oldValue, newValue) => {
+    const v = (newValue || '').trim();
+    if (!v || v === oldValue) return;
+    const map = draft.subcategories || {};
+    const list = map[category] || [];
+    commit({
+      ...draft,
+      subcategories: { ...map, [category]: list.map(x => x === oldValue ? v : x) },
+      products: draft.products.map(p =>
+        p.category === category && p.subcategory === oldValue ? { ...p, subcategory: v } : p)
+    });
+  };
+
+  const deleteSubcategory = (category, value) => {
+    const map = draft.subcategories || {};
+    const list = map[category] || [];
+    const inUse = draft.products.filter(p => p.category === category && p.subcategory === value).length;
+    if (inUse > 0) return;
+    commit({ ...draft, subcategories: { ...map, [category]: list.filter(x => x !== value) } });
+  };
+
+  const moveSubcategory = (category, value, dir) => {
+    const map = draft.subcategories || {};
+    const list = map[category] || [];
+    const index = list.indexOf(value);
+    if (index === -1) return;
+    commit({ ...draft, subcategories: { ...map, [category]: moveInArray(list, index, dir) } });
+  };
+
+  const subcategoryUsageCount = (category, value) =>
+    draft.products.filter(p => p.category === category && p.subcategory === value).length;
 
   // -- Draft management --
   const resetDraftToSeed = () => commit(clone(seedData));
@@ -180,6 +257,7 @@ export const ProductsProvider = ({ children }) => {
       if (!parsed || !Array.isArray(parsed.products)) throw new Error('Invalid file');
       commit({
         categories:     parsed.categories     || seedData.categories,
+        subcategories:  parsed.subcategories  || seedData.subcategories || {},
         materials:      parsed.materials      || seedData.materials,
         roomTypes:      parsed.roomTypes      || seedData.roomTypes,
         tags:           parsed.tags           || seedData.tags,
@@ -212,6 +290,7 @@ export const categoryIcon = ${JSON.stringify({
 export const productsData = ${body};
 
 export const products       = productsData.products;
+export const subcategories  = productsData.subcategories || {};
 export const categories     = ['All', ...productsData.categories];
 export const materials      = ['All', ...productsData.materials];
 export const roomTypes      = ['All', ...productsData.roomTypes];
@@ -234,12 +313,14 @@ export const availabilities = ['All', ...productsData.availabilities];
     rawCategories:  live.categories,
     rawMaterials:   live.materials,
     rawRoomTypes:   live.roomTypes,
+    subcategories:  live.subcategories || {},
 
     // admin-only operations (UI gates access; functions don't check)
     draft,
     hasUnexportedChanges,
-    addProduct, updateProduct, deleteProduct,
-    addTaxonomyValue, renameTaxonomyValue, deleteTaxonomyValue, taxonomyUsageCount,
+    addProduct, updateProduct, deleteProduct, moveProduct,
+    addTaxonomyValue, renameTaxonomyValue, deleteTaxonomyValue, taxonomyUsageCount, moveTaxonomyValue,
+    addSubcategory, renameSubcategory, deleteSubcategory, moveSubcategory, subcategoryUsageCount,
     resetDraftToSeed, importDraft, exportProductsJs,
     newVariantId
   };

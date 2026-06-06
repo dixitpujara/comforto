@@ -36,14 +36,15 @@ const FilterGroup = ({ title, items, state, onToggle, open, onToggleOpen }) => (
 
 const Catalog = () => {
   const [searchParams] = useSearchParams();
-  const { products, categories, materials, roomTypes, availabilities } = useProducts();
+  const { products, categories, materials, roomTypes, availabilities, subcategories } = useProducts();
 
-  const [selectedCategories, setSelectedCategories]  = useState([]);
-  const [selectedMaterials,  setSelectedMaterials]   = useState([]);
-  const [selectedRooms,      setSelectedRooms]       = useState([]);
-  const [selectedAvail,      setSelectedAvail]       = useState([]);
-  const [searchQuery,        setSearchQuery]         = useState('');
-  const [visibleCount,       setVisibleCount]        = useState(ITEMS_PER_PAGE);
+  const [selectedCategories,    setSelectedCategories]    = useState([]);
+  const [selectedSubcategories, setSelectedSubcategories] = useState([]);
+  const [selectedMaterials,     setSelectedMaterials]     = useState([]);
+  const [selectedRooms,         setSelectedRooms]         = useState([]);
+  const [selectedAvail,         setSelectedAvail]         = useState([]);
+  const [searchQuery,           setSearchQuery]           = useState('');
+  const [visibleCount,          setVisibleCount]          = useState(ITEMS_PER_PAGE);
 
   // Accordion: only one group open at a time. null = all closed.
   const [openGroup, setOpenGroup] = useState('Category');
@@ -51,23 +52,27 @@ const Catalog = () => {
   const openGroups = {
     Search:       openGroup === 'Search',
     Category:     openGroup === 'Category',
+    Subcategory:  openGroup === 'Subcategory',
     Material:     openGroup === 'Material',
     Room:         openGroup === 'Room',
     Availability: openGroup === 'Availability',
   };
 
-  // ---- URL → state sync (fires every time category/q in the URL changes) ----
+  // ---- URL → state sync (fires every time category/subcategory/q in the URL changes) ----
   useEffect(() => {
     const cat = searchParams.get('category');
+    const sub = searchParams.get('subcategory');
     const q   = searchParams.get('q');
     setSelectedCategories(cat ? [cat] : []);
+    setSelectedSubcategories(sub ? [sub] : []);
     setSearchQuery(q || '');
+    if (sub) setOpenGroup('Subcategory');
   }, [searchParams]);
 
   // Reset pagination when any filter changes
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE);
-  }, [selectedCategories, selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
+  }, [selectedCategories, selectedSubcategories, selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
 
   const makeToggle = (state, setState) => (value) => {
     setState(state.includes(value) ? state.filter(x => x !== value) : [...state, value]);
@@ -75,6 +80,7 @@ const Catalog = () => {
 
   const clearAll = () => {
     setSelectedCategories([]);
+    setSelectedSubcategories([]);
     setSelectedMaterials([]);
     setSelectedRooms([]);
     setSelectedAvail([]);
@@ -84,19 +90,21 @@ const Catalog = () => {
   // Match helper that lets us "exclude" one filter group when computing counts
   const matchesExcept = (p, except) => {
     const q = searchQuery.trim().toLowerCase();
-    const c = except === 'Category'     || !selectedCategories.length || selectedCategories.includes(p.category);
-    const m = except === 'Material'     || !selectedMaterials.length  || selectedMaterials.includes(p.material);
-    const r = except === 'Room'         || !selectedRooms.length      || selectedRooms.includes(p.roomType);
-    const a = except === 'Availability' || !selectedAvail.length      || selectedAvail.includes(p.availability);
+    const c  = except === 'Category'     || !selectedCategories.length    || selectedCategories.includes(p.category);
+    const sc = except === 'Subcategory'  || !selectedSubcategories.length || selectedSubcategories.includes(p.subcategory);
+    const m  = except === 'Material'     || !selectedMaterials.length     || selectedMaterials.includes(p.material);
+    const r  = except === 'Room'         || !selectedRooms.length         || selectedRooms.includes(p.roomType);
+    const a  = except === 'Availability' || !selectedAvail.length         || selectedAvail.includes(p.availability);
     const s = !q
       || p.name.toLowerCase().includes(q)
       || (p.subtitle || '').toLowerCase().includes(q)
-      || (p.category || '').toLowerCase().includes(q);
-    return c && m && r && a && s;
+      || (p.category || '').toLowerCase().includes(q)
+      || (p.subcategory || '').toLowerCase().includes(q);
+    return c && sc && m && r && a && s;
   };
 
   const filtered = useMemo(() => products.filter(p => matchesExcept(p, null)),
-    [products, selectedCategories, selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
+    [products, selectedCategories, selectedSubcategories, selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
 
   // Build option lists with counts; hide options whose count is 0
   const optionsWithCount = (groupName, opts, field) =>
@@ -108,15 +116,25 @@ const Catalog = () => {
       }))
       .filter(x => x.count > 0);
 
-  const categoryItems     = useMemo(() => optionsWithCount('Category',     categories,     'category'),     [products, categories,     selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
-  const materialItems     = useMemo(() => optionsWithCount('Material',     materials,      'material'),     [products, materials,      selectedCategories, selectedRooms, selectedAvail, searchQuery]);
-  const roomItems         = useMemo(() => optionsWithCount('Room',         roomTypes,      'roomType'),     [products, roomTypes,      selectedCategories, selectedMaterials, selectedAvail, searchQuery]);
-  const availabilityItems = useMemo(() => optionsWithCount('Availability', availabilities, 'availability'), [products, availabilities, selectedCategories, selectedMaterials, selectedRooms, searchQuery]);
+  // Subcategories shown depend on the selected categories (all of them when none
+  // is selected). Names are de-duped across categories.
+  const subcategoryOptions = useMemo(() => {
+    const cats = selectedCategories.length ? selectedCategories : Object.keys(subcategories);
+    const seen = [];
+    cats.forEach(c => (subcategories[c] || []).forEach(s => { if (!seen.includes(s)) seen.push(s); }));
+    return seen;
+  }, [subcategories, selectedCategories]);
+
+  const categoryItems     = useMemo(() => optionsWithCount('Category',     categories,     'category'),     [products, categories,     selectedSubcategories, selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
+  const subcategoryItems  = useMemo(() => optionsWithCount('Subcategory',  subcategoryOptions, 'subcategory'), [products, subcategoryOptions, selectedCategories, selectedMaterials, selectedRooms, selectedAvail, searchQuery]);
+  const materialItems     = useMemo(() => optionsWithCount('Material',     materials,      'material'),     [products, materials,      selectedCategories, selectedSubcategories, selectedRooms, selectedAvail, searchQuery]);
+  const roomItems         = useMemo(() => optionsWithCount('Room',         roomTypes,      'roomType'),     [products, roomTypes,      selectedCategories, selectedSubcategories, selectedMaterials, selectedAvail, searchQuery]);
+  const availabilityItems = useMemo(() => optionsWithCount('Availability', availabilities, 'availability'), [products, availabilities, selectedCategories, selectedSubcategories, selectedMaterials, selectedRooms, searchQuery]);
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
   const hasFilters =
-    selectedCategories.length || selectedMaterials.length ||
+    selectedCategories.length || selectedSubcategories.length || selectedMaterials.length ||
     selectedRooms.length || selectedAvail.length || searchQuery;
 
   return (
@@ -150,6 +168,9 @@ const Catalog = () => {
           </div>
 
           <FilterGroup title="Category"     items={categoryItems}     state={selectedCategories} onToggle={makeToggle(selectedCategories, setSelectedCategories)} open={openGroups.Category}     onToggleOpen={() => toggleGroup('Category')} />
+          {subcategoryItems.length > 0 && (
+            <FilterGroup title="Subcategory" items={subcategoryItems} state={selectedSubcategories} onToggle={makeToggle(selectedSubcategories, setSelectedSubcategories)} open={openGroups.Subcategory} onToggleOpen={() => toggleGroup('Subcategory')} />
+          )}
           <FilterGroup title="Material"     items={materialItems}     state={selectedMaterials}  onToggle={makeToggle(selectedMaterials,  setSelectedMaterials)}  open={openGroups.Material}     onToggleOpen={() => toggleGroup('Material')} />
           <FilterGroup title="Room"         items={roomItems}         state={selectedRooms}      onToggle={makeToggle(selectedRooms,      setSelectedRooms)}      open={openGroups.Room}         onToggleOpen={() => toggleGroup('Room')} />
           <FilterGroup title="Availability" items={availabilityItems} state={selectedAvail}      onToggle={makeToggle(selectedAvail,      setSelectedAvail)}      open={openGroups.Availability} onToggleOpen={() => toggleGroup('Availability')} />

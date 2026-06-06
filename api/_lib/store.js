@@ -14,6 +14,7 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 
 const seedCatalog = () => ({
   categories: productsData.categories,
+  subcategories: productsData.subcategories || {},
   materials: productsData.materials,
   roomTypes: productsData.roomTypes,
   tags: productsData.tags,

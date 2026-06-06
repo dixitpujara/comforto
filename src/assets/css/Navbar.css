@@ -84,6 +84,56 @@
   width: 0;
 }
 
+/* Category + subcategory dropdown (desktop) */
+.navbar-link-wrap { position: relative; display: inline-flex; align-items: center; }
+.navbar-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  margin-top: 0.4rem;
+  padding: 0.4rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
+  z-index: 60;
+}
+/* invisible bridge so the menu doesn't close in the gap below the link */
+.navbar-dropdown::before {
+  content: '';
+  position: absolute;
+  top: -0.5rem;
+  left: 0;
+  right: 0;
+  height: 0.5rem;
+}
+.navbar-link-wrap:hover .navbar-dropdown,
+.navbar-link-wrap:focus-within .navbar-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.navbar-dropdown-link {
+  padding: 0.5rem 0.7rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.navbar-dropdown-link:hover {
+  background: var(--color-surface-soft);
+  color: var(--color-text-primary);
+}
+
 .navbar-actions {
   display: flex;
   align-items: center;
@@ -286,14 +336,27 @@
   display: flex;
   flex-direction: column;
 }
+.navbar-mobile-group { border-bottom: 1px solid var(--color-border-soft); }
 .navbar-mobile-link {
+  display: block;
   padding: 0.7rem 0.25rem;
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text-primary);
-  border-bottom: 1px solid var(--color-border-soft);
 }
 .navbar-mobile-link.active { color: var(--color-accent-dark); }
+.navbar-mobile-sublinks {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 0.5rem 0.9rem;
+}
+.navbar-mobile-sublink {
+  padding: 0.45rem 0.25rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+.navbar-mobile-sublink.active { color: var(--color-accent-dark); }
 
 .navbar-mobile-actions {
   display: flex;
