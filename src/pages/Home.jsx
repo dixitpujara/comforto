@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Sofa, Table, Lamp, Bed, Armchair, Package,
   ArrowRight,
-  Sparkles, Truck, ShieldCheck, Leaf,
+  Sparkles, Truck, Award, Leaf,
   ChevronDown, ChevronLeft, ChevronRight,
   Heart, Scale, FilePlus, Check, MessageCircle
 } from 'lucide-react';
@@ -41,7 +41,7 @@ const SLIDES = [
   {
     eyebrow: 'Heirloom Pieces',
     title: ['Crafted to Outlive', 'Generations.'],
-    copy: 'Sustainable hardwoods, hand-finished joinery, and a 10-year warranty on every Comforto creation.',
+    copy: 'Sustainable hardwoods, hand-finished joinery, and craftsmanship established since 2018 in every Comforto creation.',
     image: 'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&q=80&w=1800',
     primary:   { label: 'See Craftsmanship', to: '/catalog' },
     secondary: { label: 'Visit Showroom',    to: '#visit' }
@@ -200,7 +200,7 @@ const Hero = () => {
 const VALUES = [
   { icon: Sparkles,    label: 'Bespoke Design' },
   { icon: Truck,       label: 'White-Glove Delivery' },
-  { icon: ShieldCheck, label: '10-Year Warranty' },
+  { icon: Award, label: 'Established Since 2018' },
   { icon: Leaf,        label: 'Sustainably Sourced' }
 ];
 
@@ -399,8 +399,8 @@ const CraftedQuality = () => (
           <span className="diamond" />
         </span>
         <div>
-          <strong>10y</strong>
-          <span>Warranty Promise</span>
+          <strong>2018</strong>
+          <span>Established Since</span>
         </div>
       </div>
     </div>
