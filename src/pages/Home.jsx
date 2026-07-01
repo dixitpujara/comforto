@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Sofa, Table, Lamp, Bed, Armchair, Package,
   ArrowRight,
-  Sparkles, Truck, Award, Leaf,
+  Sparkles, Truck, Award, Leaf, PencilRuler, Hammer,
   ChevronDown, ChevronLeft, ChevronRight,
   Heart, Scale, FilePlus, Check, MessageCircle
 } from 'lucide-react';
@@ -373,36 +373,46 @@ const FeaturedCard = ({ product }) => {
   );
 };
 
-/* ─────────── Crafted Quality ─────────── */
-const CraftedQuality = () => (
-  <section className="crafted container">
-    <div className="crafted-image">
-      <SafeImage
-        src="https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&q=80&w=1200"
-        alt="Artisan crafting furniture"
-      />
+/* ─────────── Bespoke Journey (made-to-order process) ─────────── */
+const JOURNEY_STEPS = [
+  { icon: MessageCircle, title: 'Consult', copy: 'Share your space and style — in-store or on WhatsApp.' },
+  { icon: PencilRuler,   title: 'Design',  copy: 'We tailor the size, fabric and wood to you.' },
+  { icon: Hammer,        title: 'Craft',   copy: 'Skilled artisans hand-build it in solid wood.' },
+  { icon: Truck,         title: 'Deliver', copy: 'We deliver and place it right in your home.' },
+];
+
+const BespokeJourney = () => (
+  <section className="journey container">
+    <header className="section-head">
+      <span className="eyebrow">How It Works</span>
+      <h2 className="section-title">Made Just for You</h2>
+      <p>Four simple steps, from first hello to a piece that's truly yours.</p>
+      <span className="journey-rule" aria-hidden="true" />
+    </header>
+
+    <div className="journey-steps">
+      {JOURNEY_STEPS.map((step, i) => {
+        const Icon = step.icon;
+        return (
+          <React.Fragment key={step.title}>
+            <div className="journey-step">
+              <span className="journey-num" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+              <span className="journey-step-icon"><Icon size={24} /></span>
+              <h3 className="journey-step-title">{step.title}</h3>
+              <p className="journey-step-copy">{step.copy}</p>
+            </div>
+            {i < JOURNEY_STEPS.length - 1 && (
+              <span className="journey-arrow" aria-hidden="true"><ChevronRight size={20} /></span>
+            )}
+          </React.Fragment>
+        );
+      })}
     </div>
-    <div className="crafted-text">
-      <span className="eyebrow">Our Promise</span>
-      <h2 className="section-title">Crafted for Enduring Quality</h2>
-      <p>
-        Every Comforto piece begins with architectural rigor and ends with human
-        touch. We source sustainable hardwoods and premium textiles that don't
-        just last — they age with grace, becoming part of your home's unique story.
-      </p>
-      <div className="crafted-stats">
-        <div>
-          <strong>15+</strong>
-          <span>Master Artisans</span>
-        </div>
-        <span className="crafted-divider" aria-hidden="true">
-          <span className="diamond" />
-        </span>
-        <div>
-          <strong>2018</strong>
-          <span>Established Since</span>
-        </div>
-      </div>
+
+    <div className="journey-cta">
+      <Link to="/catalog" className="btn btn-accent">
+        Explore the Collection <ArrowRight size={16} />
+      </Link>
     </div>
   </section>
 );
@@ -414,7 +424,7 @@ const Home = () => {
       <ValuesStrip />
       <BrowseCategories />
       <FeaturedSelection />
-      <CraftedQuality />
+      <BespokeJourney />
     </div>
   );
 };
