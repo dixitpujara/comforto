@@ -813,9 +813,6 @@
   .featured-grid  { grid-template-columns: repeat(3, 1fr); }
   .journey-steps  { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
   .journey-arrow  { display: none; }
-  .visit-inner    { grid-template-columns: 1fr; }
-  .visit-image    { min-height: 280px; order: -1; }
-  .visit-text     { padding: 2.5rem 2rem; }
   .hero-vmark     { display: none; }
   .hero-corner    { width: 22px; height: 22px; }
   .hero-corner.tl { top: 22px; left: 22px; }
@@ -837,6 +834,4 @@
   .journey-steps  { grid-template-columns: 1fr; gap: 1.1rem; }
   .values-inner   { gap: 0.85rem; padding: 0.85rem 1rem; }
   .value-sep      { display: none; }
-  .testimonial-inner { padding: 2.25rem 1.5rem; }
-  .visit-text     { padding: 2.25rem 1.5rem; }
 }

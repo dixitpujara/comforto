@@ -1,186 +1,110 @@
 /* ────────────────────────────────────────────
-   Site Footer — Visit Showroom + minimal band
+   Site Footer — Experience the showroom (minimal, centred) + band
    ──────────────────────────────────────────── */
 .site-footer {
   width: 100%;
   margin-top: 5rem;
   background: #000;
-}
-
-/* ─── Visit Showroom (merged into footer, full black background) ─── */
-.site-footer-visit {
-  padding: 0;
-  background: #000;
+  color: #fff;
   position: relative;
 }
-.site-footer-visit::before {
+/* Gold accent line across the very top */
+.site-footer::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
   background: var(--color-accent);
-  z-index: 1;
 }
 
-.site-footer-visit .visit-inner {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-  align-items: stretch;
-  background: #000;
-  color: #fff;
-  border-radius: 0;
-  overflow: hidden;
-  position: relative;
-  border: none;
-}
+.site-footer-visit { padding: 4.75rem 0; }
 
-.site-footer-visit .visit-text {
-  padding: 3.25rem 1.5rem;
+.visit-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 1rem;
 }
-.site-footer-visit .visit-text .eyebrow { color: var(--color-accent); }
-.site-footer-visit .visit-text .eyebrow::after { background: var(--color-accent); }
-.site-footer-visit .visit-text .section-title {
+.visit-inner .eyebrow { color: var(--color-accent); }
+.visit-inner .section-title {
   color: #fff;
-  margin: 0.25rem 0 0.6rem;
+  font-size: 2.3rem;
+  margin: 0.35rem 0 0.2rem;
 }
-.site-footer-visit .visit-text p {
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 0.96rem;
-  line-height: 1.7;
-  max-width: 460px;
+.visit-inner p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.98rem;
+  line-height: 1.75;
+  max-width: 480px;
 }
 
-.site-footer-visit .visit-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 1rem 0 0.5rem;
-  border-top: 1px dashed rgba(201, 166, 107, 0.3);
-  margin-top: 0.5rem;
-}
-.site-footer-visit .visit-meta-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.85rem;
-}
-.site-footer-visit .visit-meta-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(201, 166, 107, 0.15);
-  border: 1px solid rgba(201, 166, 107, 0.3);
-  color: var(--color-accent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.site-footer-visit .visit-meta-item > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-.site-footer-visit .visit-meta-item strong {
-  font-size: 0.92rem;
-  color: #fff;
-  font-weight: 600;
-}
-.site-footer-visit .visit-meta-item span {
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 0.04em;
-}
-
-.site-footer-visit .visit-actions {
+.visit-actions {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
-  padding-top: 0.5rem;
+  justify-content: center;
+  margin-top: 0.5rem;
 }
-.site-footer-visit .visit-actions .btn-ghost {
+.visit-actions .btn-ghost {
   background: transparent;
   border-color: rgba(201, 166, 107, 0.45);
   color: #fff;
 }
-.site-footer-visit .visit-actions .btn-ghost:hover {
+.visit-actions .btn-ghost:hover {
   border-color: var(--color-accent);
   background: rgba(201, 166, 107, 0.1);
 }
 
-.site-footer-visit .visit-image {
-  position: relative;
-  min-height: 380px;
-  overflow: hidden;
-}
-.site-footer-visit .visit-image img {
+/* Slim single-line contact facts */
+.visit-facts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem 1.9rem;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: saturate(1.05);
+  max-width: 580px;
+  margin-top: 1.9rem;
+  padding-top: 1.9rem;
+  border-top: 1px solid rgba(201, 166, 107, 0.2);
 }
-.site-footer-visit .visit-image::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(26, 26, 26, 0.45) 0%, transparent 30%);
-  pointer-events: none;
+.visit-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+  transition: color var(--transition-fast);
 }
+.visit-fact svg { color: var(--color-accent); flex-shrink: 0; }
+a.visit-fact:hover { color: #fff; }
 
-/* ─── Minimal bottom band (merged into black footer) ─── */
-.site-footer-band {
-  position: relative;
-  width: 100%;
-  background: #000;
-  color: #fff;
-  border-top: 1px solid rgba(201, 166, 107, 0.18);
-}
-.site-footer-stripe {
-  display: none;
-}
+/* ─── Bottom band ─── */
+.site-footer-band { border-top: 1px solid rgba(201, 166, 107, 0.18); }
 .site-footer-band-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: 1.4rem 1.5rem;
+  padding: 1.4rem 0;
   flex-wrap: wrap;
 }
-
-.site-footer-brand-row {
-  display: inline-flex;
-  align-items: center;
-  color: inherit;
-}
-.site-footer-logo {
-  width: 180px;
-  height: auto;
-  display: block;
-}
-
+.site-footer-brand-row { display: inline-flex; align-items: center; color: inherit; }
+.site-footer-logo { width: 175px; height: auto; display: block; }
 .site-footer-copy {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.55);
   letter-spacing: 0.02em;
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
-  .site-footer-visit .visit-inner    { grid-template-columns: 1fr; }
-  .site-footer-visit .visit-image    { min-height: 280px; order: -1; }
-  .site-footer-visit .visit-text     { padding: 2.5rem 1.5rem; }
-}
-@media (max-width: 768px) {
-  .site-footer-visit .visit-text     { padding: 2.25rem 1.5rem; }
-}
+/* ─── Responsive ─── */
 @media (max-width: 640px) {
-  .site-footer-band-inner {
-    justify-content: center;
-    text-align: center;
-  }
+  .site-footer-visit { padding: 3.5rem 0; }
+  .visit-inner .section-title { font-size: 1.8rem; }
+  .visit-facts { flex-direction: column; gap: 0.85rem; }
+  .site-footer-band-inner { justify-content: center; text-align: center; }
   .site-footer-copy { width: 100%; }
 }
