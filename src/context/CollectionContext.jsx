@@ -3,9 +3,11 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 /**
  * Collection / quotation builder state.
  *
- * items:    [{ id, productId, name, category, subtitle, image, qty, rate, remarks }]
+ * items:    [{ id, productId, name, category, subtitle, image, materialImage, qty, rate, remarks }]
+ *           materialImage is an optional fabric/finish swatch photo the staff
+ *           member attaches per line; it prints beside the product thumbnail.
  * customer: { name, mobile, email, address, projectName, projectType, deliveryDate, deliveryAddress }
- * notes:    { customer, internal, terms }
+ * notes:    { customer }  — the only free-text note; terms are fixed in the PDF
  *
  * Persisted to localStorage so staff don't lose work between sessions.
  */
@@ -22,7 +24,9 @@ const emptyCustomer = {
   interior: '',
   deliveryDate: '', deliveryAddress: ''
 };
-const emptyNotes = { customer: '', internal: '', terms: 'Quotation valid for 15 days. 50% advance to confirm order. Prices inclusive of GST.' };
+// Terms & conditions are fixed company policy printed by the PDF itself
+// (see STANDARD_TERMS in utils/quotationPdf.js) — staff don't edit them here.
+const emptyNotes = { customer: '' };
 
 const loadInitial = () => {
   try {
@@ -32,7 +36,8 @@ const loadInitial = () => {
     return {
       items: parsed.items || [],
       customer: { ...emptyCustomer, ...(parsed.customer || {}) },
-      notes:    { ...emptyNotes, ...(parsed.notes || {}) }
+      // Drop any terms / internal comments left over from older saved quotes
+      notes: { customer: parsed.notes?.customer || '' }
     };
   } catch {
     return { items: [], customer: emptyCustomer, notes: emptyNotes };
@@ -43,7 +48,24 @@ export const CollectionProvider = ({ children }) => {
   const [state, setState] = useState(loadInitial);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      // Quota exceeded — almost always an oversized custom-item photo. Never let
+      // this throw: an error here unmounts the whole app and the staff member
+      // loses the quote they were building. Retry without the inline photos so
+      // at least the line items, customer and notes survive a reload.
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          ...state,
+          items: state.items.map(i => ({
+            ...i,
+            image:         String(i.image || '').startsWith('data:')         ? '' : i.image,
+            materialImage: String(i.materialImage || '').startsWith('data:') ? '' : i.materialImage
+          }))
+        }));
+      } catch { /* keep the collection in memory for this session only */ }
+    }
   }, [state]);
 
   const addItem = (product) => {
@@ -63,6 +85,7 @@ export const CollectionProvider = ({ children }) => {
         category: product.category,
         subtitle: product.subtitle || '',
         image: product.image,
+        materialImage: '',
         qty: 1,
         rate: 0,
         remarks: ''
@@ -83,6 +106,7 @@ export const CollectionProvider = ({ children }) => {
         category: 'Custom',
         subtitle: '',
         image: image || '',
+        materialImage: '',
         qty: Math.max(1, Number(qty) || 1),
         rate: Math.max(0, Number(rate) || 0),
         remarks: ''

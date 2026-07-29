@@ -7,13 +7,20 @@ const formatINR = (n) => `Rs. ${Number(n || 0).toLocaleString('en-IN', { minimum
 
 const COMPANY = {
   name: 'Comforto Furniture',
-  tagline: 'Crafted for enduring quality',
   address: 'Bopal, Ahmedabad, Gujarat, India',
   hours: 'Mon–Sun · 10:30 AM to 8:30 PM',
   phone: '+91 94299 18571',
-  email: 'hello@comforto.in',
-  gst: '24XXXXXXXXXXXXX'
+  gst: '24AAOFC2033P1ZA'
 };
+
+// Fixed company terms printed on every quotation — not editable by staff.
+const STANDARD_TERMS = [
+  '50% advance with order; balance before delivery.',
+  'Delivery timeline as mutually agreed.',
+  'Goods once sold are not returnable.',
+  'Warranty covers manufacturing defects only.',
+  'Transportation and installation extra unless specified.'
+].map(line => `• ${line}`).join('\n');
 
 // Palette
 const ACCENT      = [201, 166, 107]; // gold
@@ -64,12 +71,21 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   const margin = 40;
 
   const thumbs = await Promise.all(items.map(it => urlToThumbDataURL(it.image)));
+  // Optional fabric/finish swatch the staff member attached to each line
+  const matThumbs = await Promise.all(items.map(it => urlToThumbDataURL(it.materialImage)));
+  const anyMaterial = matThumbs.some(Boolean);
 
   const quoteNo  = `CMF-${Date.now().toString().slice(-8)}`;
   const today    = new Date();
   const fmtDate  = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const dateStr  = fmtDate(today);
-  const validity = fmtDate(new Date(today.getTime() + 15 * 86400000));
+  // <input type="date"> gives "YYYY-MM-DD"; build the date in local time so the
+  // printed day can't slip by one through UTC parsing.
+  const fmtISODate = (iso) => {
+    const [yy, mm, dd] = String(iso || '').split('-').map(Number);
+    return (yy && mm && dd) ? fmtDate(new Date(yy, mm - 1, dd)) : '';
+  };
+  const deliveryStr = fmtISODate(customer.deliveryDate) || 'As agreed';
 
   // Paint a horizontal gold gradient (ACCENT -> ACCENT_DARK) as thin strips,
   // mirroring the gradient used for buttons/accents on the website.
@@ -99,28 +115,44 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   doc.setFillColor(...ACCENT);
   doc.rect(0, headerH + 5, pageW, 0.6, 'F');
 
-  // Monogram: solid gold disc with a thin deeper-gold ring, white "C"
-  doc.setFillColor(...ACCENT);
-  doc.circle(margin + 22, 54, 21, 'F');
-  doc.setDrawColor(...ACCENT_DARK);
-  doc.setLineWidth(0.9);
-  doc.circle(margin + 22, 54, 24, 'S');
-  doc.setTextColor(...WHITE);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.text('C', margin + 15, 62);
+  // ── Logo, matching src/assets/logo.svg used across the website ──
+  // Gold disc with a thin inset ring and a dark serif "C", then the
+  // "Comforto" wordmark over wide-tracked gold "FURNITURE".
+  // Sizes are the SVG's own numbers scaled by logoR / 24 (its disc radius), so
+  // the disc, wordmark and the tight gap beneath it keep the website's ratios.
+  const logoR  = 17;
+  const logoCX = margin + logoR;
+  const logoCY = 50;
+  const k      = logoR / 24;
+  const textX  = logoCX + logoR + 12 * k;
 
-  // Brand block (dark text on the light header)
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(22);
+  doc.setFillColor(...ACCENT);
+  doc.circle(logoCX, logoCY, logoR, 'F');
+  doc.setDrawColor(...ACCENT_DARK);
+  doc.setLineWidth(0.6);
+  doc.circle(logoCX, logoCY, logoR * 0.854, 'S');   // inset ring, as in the SVG
+  doc.setFont('times', 'normal');
+  doc.setFontSize(30 * k);
   doc.setTextColor(...DARK);
-  doc.text(COMPANY.name, margin + 60, 50);
-  doc.setFontSize(8);
+  doc.text('C', logoCX, logoCY + 30 * k * 0.33, { align: 'center' });
+
+  const wordmarkY = logoCY + 7.8 * k;               // SVG: baseline 7.8 below disc centre
+  doc.setFont('times', 'normal');
+  doc.setFontSize(28 * k);
+  doc.setTextColor(...DARK);
+  doc.text(COMPANY.name.split(' ')[0], textX, wordmarkY);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9 * k);
   doc.setTextColor(...ACCENT_DARK);
-  doc.text(COMPANY.tagline.toUpperCase(), margin + 60, 64);
+  doc.setCharSpace(4 * k);                          // letter-spacing: 4 in the SVG
+  doc.text('FURNITURE', textX, wordmarkY + 11.2 * k);
+  doc.setCharSpace(0);
+
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
-  doc.text(`${COMPANY.address}  ·  ${COMPANY.phone}  ·  ${COMPANY.email}`, margin + 60, 82);
+  doc.text(`${COMPANY.address}  ·  ${COMPANY.phone}`, textX, 78);
 
   // Quotation meta block (right) — gold-bullet rows
   const rightX = pageW - margin;
@@ -129,13 +161,15 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   doc.setTextColor(...ACCENT_DARK);
   doc.text('QUOTATION', rightX, 36, { align: 'right' });
 
+  // Label column sits far enough left that the longest label ("DELIVERY DATE")
+  // clears the right-aligned value beside it.
   const metaRow = (label, value, ly) => {
     doc.setFillColor(...ACCENT);
-    doc.circle(rightX - 118, ly - 2.5, 1.3, 'F');
+    doc.circle(rightX - 143, ly - 2.5, 1.3, 'F');
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...MUTED);
-    doc.text(label.toUpperCase(), rightX - 110, ly);
+    doc.text(label.toUpperCase(), rightX - 135, ly);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(...DARK);
@@ -143,7 +177,7 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   };
   metaRow('Quote No.',  quoteNo,  56);
   metaRow('Issued',     dateStr,  72);
-  metaRow('Valid Till', validity, 88);
+  metaRow('Delivery Date', deliveryStr, 88);
 
   let y = 142;
 
@@ -216,14 +250,14 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   const custEnd = drawInfoCard(margin, y, colW, 'Prepared For', customer.name, [
     customer.mobile  && `Mobile   ${customer.mobile}`,
     customer.email   && `Email    ${customer.email}`,
-    customer.address && customer.address
+    customer.address && `Address  ${customer.address}`
   ]);
 
   const projEnd = drawInfoCard(projX, y, colW, 'Project & Delivery', customer.projectName, [
     customer.projectType     && `Type        ${customer.projectType}`,
     customer.interior        && `Interior    ${customer.interior}`,
-    customer.deliveryDate    && `Delivery    ${customer.deliveryDate}`,
-    customer.deliveryAddress && customer.deliveryAddress
+    customer.deliveryDate    && `Delivery    ${fmtISODate(customer.deliveryDate)}`,
+    customer.deliveryAddress && `Address     ${customer.deliveryAddress}`
   ]);
 
   y = Math.max(custEnd, projEnd) + 18;
@@ -239,7 +273,12 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   doc.line(margin, y + 4, margin + 26, y + 4);
   y += 12;
 
-  const head = [['#', '', 'Item', 'Qty', 'Rate', 'Amount']];
+  // The material column only appears when at least one line has a swatch, so
+  // quotes without any material photos keep the wider Item column.
+  const MAT_COL  = anyMaterial ? 2 : -1;
+  const ITEM_COL = anyMaterial ? 3 : 2;
+
+  const head = [['#', '', ...(anyMaterial ? ['Material'] : []), 'Item', 'Qty', 'Rate', 'Amount']];
   const body = items.map((it, idx) => {
     const amount = (Number(it.rate) || 0) * (Number(it.qty) || 0);
     const itemCell = [
@@ -251,12 +290,23 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
     return [
       String(idx + 1).padStart(2, '0'),
       '', // image cell — drawn via didDrawCell
+      ...(anyMaterial ? [''] : []), // material swatch — drawn via didDrawCell
       itemCell,
       String(it.qty || 0),
       formatINR(it.rate),
       formatINR(amount)
     ];
   });
+
+  const columnStyles = {
+    0: { cellWidth: 30, halign: 'center', textColor: WHITE, fontSize: 9, fontStyle: 'bold' },
+    1: { cellWidth: 60, halign: 'center' },
+    [ITEM_COL]:     { valign: 'top', textColor: DARK },
+    [ITEM_COL + 1]: { cellWidth: 40, halign: 'center' },
+    [ITEM_COL + 2]: { cellWidth: 70, halign: 'right' },
+    [ITEM_COL + 3]: { cellWidth: 86, halign: 'right', fontStyle: 'bold', textColor: DARK }
+  };
+  if (anyMaterial) columnStyles[MAT_COL] = { cellWidth: 56, halign: 'center' };
 
   autoTable(doc, {
     startY: y,
@@ -282,14 +332,7 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
     },
     bodyStyles: { minCellHeight: 64 },
     alternateRowStyles: { fillColor: PAPER },
-    columnStyles: {
-      0: { cellWidth: 30, halign: 'center', textColor: WHITE, fontSize: 9, fontStyle: 'bold' },
-      1: { cellWidth: 60, halign: 'center' },
-      2: { valign: 'top', textColor: DARK },
-      3: { cellWidth: 40, halign: 'center' },
-      4: { cellWidth: 76, halign: 'right' },
-      5: { cellWidth: 92, halign: 'right', fontStyle: 'bold', textColor: DARK }
-    },
+    columnStyles,
     willDrawCell: (data) => {
       // Gold circular badge behind the row number — drawn before text so the
       // white "01" / "02" / ... renders on top of the disc.
@@ -312,23 +355,25 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
       }
 
       if (data.section !== 'body') return;
-      // Product thumbnail
-      if (data.column.index === 1) {
-        const thumb = thumbs[data.row.index];
-        if (thumb) {
-          const pad = 4;
-          const size = Math.min(data.cell.height, data.cell.width) - pad * 2;
-          const ix = data.cell.x + (data.cell.width  - size) / 2;
-          const iy = data.cell.y + (data.cell.height - size) / 2;
-          try {
-            doc.addImage(thumb, 'JPEG', ix, iy, size, size);
-            // subtle gold frame around thumbnail
-            doc.setDrawColor(...ACCENT);
-            doc.setLineWidth(0.4);
-            doc.rect(ix, iy, size, size, 'S');
-          } catch { /* ignore */ }
-        }
-      }
+
+      // Square thumbnail, centred in its cell with a subtle gold frame
+      const drawThumb = (thumb) => {
+        if (!thumb) return;
+        const pad = 4;
+        const size = Math.min(data.cell.height, data.cell.width) - pad * 2;
+        const ix = data.cell.x + (data.cell.width  - size) / 2;
+        const iy = data.cell.y + (data.cell.height - size) / 2;
+        try {
+          doc.addImage(thumb, 'JPEG', ix, iy, size, size);
+          doc.setDrawColor(...ACCENT);
+          doc.setLineWidth(0.4);
+          doc.rect(ix, iy, size, size, 'S');
+        } catch { /* ignore */ }
+      };
+
+      // Product thumbnail, then the material swatch beside it
+      if (data.column.index === 1)       drawThumb(thumbs[data.row.index]);
+      else if (data.column.index === MAT_COL) drawThumb(matThumbs[data.row.index]);
     }
   });
 
@@ -437,7 +482,7 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   };
 
   drawNoteCard('Customer Notes',     notes.customer);
-  drawNoteCard('Terms & Conditions', notes.terms);
+  drawNoteCard('Terms & Conditions', STANDARD_TERMS);
 
   // ─── SIGNATURE BLOCK ─────────────────────────────────────────
   ensureSpace(70);
@@ -515,7 +560,7 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
     doc.text(COMPANY.phone, pageW - margin, fy - 2, { align: 'right' });
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...MUTED);
-    doc.text(`${COMPANY.email}  ·  GSTIN ${COMPANY.gst}`, pageW - margin, fy + 10, { align: 'right' });
+    doc.text(`GSTIN ${COMPANY.gst}`, pageW - margin, fy + 10, { align: 'right' });
 
     doc.setFontSize(7.5);
     doc.setTextColor(...MUTED);

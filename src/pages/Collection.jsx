@@ -9,6 +9,35 @@ import '../assets/css/Collection.css';
 
 const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
+// A photo straight off a phone is 3–8 MB as a data URL, which blows past the
+// ~5 MB localStorage quota the collection is persisted to. Downscale it to a
+// thumbnail that's big enough for the quotation PDF but small enough to store.
+const MAX_PHOTO_DIM = 1200;
+const readPhotoAsDataUrl = (file, maxDim = MAX_PHOTO_DIM) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(reader.error || new Error('Could not read the file.'));
+  reader.onload = () => {
+    const raw = String(reader.result);
+    const img = new Image();
+    img.onerror = () => resolve(raw);      // not decodable here — store as-is
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const out = canvas.toDataURL('image/jpeg', 0.72);
+        resolve(out.length < raw.length ? out : raw);
+      } catch { resolve(raw); }
+    };
+    img.src = raw;
+  };
+  reader.readAsDataURL(file);
+});
+
 const Collection = () => {
   const {
     items, customer, notes, subtotal,
@@ -24,14 +53,61 @@ const Collection = () => {
   const [custom, setCustom] = useState({ name: '', rate: '', image: '' });
   const customFileRef = useRef(null);
 
-  const onCustomPhoto = (e) => {
+  const onCustomPhoto = async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); e.target.value = ''; return; }
-    const reader = new FileReader();
-    reader.onload = () => setCustom(c => ({ ...c, image: String(reader.result) }));
-    reader.readAsDataURL(file);
     e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+    try {
+      const image = await readPhotoAsDataUrl(file);
+      setCustom(c => ({ ...c, image }));
+    } catch {
+      alert('Could not read that photo. Please try another one.');
+    }
+  };
+
+  // ── Material swatch (per line item) ──────────────────────────────
+  // One hidden file input shared by every row; materialTargetRef remembers
+  // which line the staff member tapped. Swatches are small on the page and in
+  // the PDF, so 700px is plenty and keeps the stored quote light.
+  const materialFileRef   = useRef(null);
+  const materialTargetRef = useRef(null);
+
+  const pickMaterial = (itemId) => {
+    materialTargetRef.current = itemId;
+    materialFileRef.current?.click();
+  };
+
+  const onMaterialPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    const itemId = materialTargetRef.current;
+    e.target.value = '';
+    materialTargetRef.current = null;
+    if (!file || !itemId) return;
+    if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+    try {
+      const materialImage = await readPhotoAsDataUrl(file, 700);
+      updateItem(itemId, { materialImage });
+    } catch {
+      alert('Could not read that photo. Please try another one.');
+    }
+  };
+
+  // Delivery is always ahead of the quote — the picker starts at tomorrow, and
+  // the guard catches dates typed straight into the field.
+  const minDeliveryDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const onDeliveryDate = (e) => {
+    const value = e.target.value;
+    if (value && value < minDeliveryDate) {
+      alert('Please choose a future delivery date.');
+      return;
+    }
+    updateCustomer({ deliveryDate: value });
   };
 
   const submitCustom = () => {
@@ -297,6 +373,7 @@ const Collection = () => {
                   <tr>
                     <th style={{ width: 44 }}>#</th>
                     <th style={{ width: 70 }}></th>
+                    <th style={{ width: 92 }}>Material</th>
                     <th>Product</th>
                     <th style={{ width: 120 }}>Qty</th>
                     <th style={{ width: 140 }}>Rate (₹)</th>
@@ -312,6 +389,23 @@ const Collection = () => {
                       <tr key={it.id}>
                         <td><span className="ctable-num">{String(idx + 1).padStart(2, '0')}</span></td>
                         <td><SafeImage src={it.image} alt={it.name} className="ctable-img compact" /></td>
+                        <td>
+                          {it.materialImage ? (
+                            <div className="mat-cell">
+                              <img src={it.materialImage} alt={`${it.name} material`} className="mat-swatch"
+                                onClick={() => pickMaterial(it.id)} title="Change material photo" />
+                              <button type="button" className="mat-clear"
+                                onClick={() => updateItem(it.id, { materialImage: '' })} title="Remove material photo">
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <button type="button" className="mat-add" onClick={() => pickMaterial(it.id)}>
+                              <ImagePlus size={14} />
+                              <span>Add</span>
+                            </button>
+                          )}
+                        </td>
                         <td>
                           <div className="ctable-name">{it.name}</div>
                           <div className="ctable-sub">{it.category}{it.subtitle ? ` · ${it.subtitle}` : ''}</div>
@@ -347,6 +441,7 @@ const Collection = () => {
                 </tbody>
               </table>
             </div>
+            <input ref={materialFileRef} type="file" accept="image/*" hidden onChange={onMaterialPhoto} />
           </section>
 
           {/* TOTALS + ADJUSTMENTS */}
@@ -409,29 +504,13 @@ const Collection = () => {
                 <input type="text" value={customer.interior} onChange={(e) => updateCustomer({ interior: e.target.value })} placeholder="Interior designer / firm name" />
               </Field>
               <Field label="Expected delivery">
-                <input type="date" value={customer.deliveryDate} onChange={(e) => updateCustomer({ deliveryDate: e.target.value })} />
+                <input type="date" value={customer.deliveryDate} min={minDeliveryDate} onChange={onDeliveryDate} />
               </Field>
               <Field label="Delivery address" full>
                 <textarea rows={2} value={customer.deliveryAddress} onChange={(e) => updateCustomer({ deliveryAddress: e.target.value })} placeholder="Site address (if different from billing)" />
               </Field>
-            </div>
-          </section>
-
-          {/* NOTES */}
-          <section className="cs-section">
-            <header className="cs-section-head">
-              <span className="eyebrow">Step 04</span>
-              <h2 className="cs-section-title">Notes &amp; terms</h2>
-            </header>
-            <div className="form-grid">
               <Field label="Customer notes & special instructions" full>
                 <textarea rows={3} value={notes.customer} onChange={(e) => updateNotes({ customer: e.target.value })} placeholder="What the customer should see on the PDF..." />
-              </Field>
-              <Field label="Internal comments (not on PDF)" full>
-                <textarea rows={2} value={notes.internal} onChange={(e) => updateNotes({ internal: e.target.value })} placeholder="Internal-only notes for the sales team..." />
-              </Field>
-              <Field label="Terms & conditions (printed)" full>
-                <textarea rows={2} value={notes.terms} onChange={(e) => updateNotes({ terms: e.target.value })} />
               </Field>
             </div>
           </section>
