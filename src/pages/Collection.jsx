@@ -112,6 +112,7 @@ const Collection = () => {
 
   const submitCustom = () => {
     if (!custom.name.trim()) { alert('Please enter an item name.'); return; }
+    if (!(Number(custom.rate) > 0)) { alert('Please enter a price greater than 0.'); return; }
     addCustomItem({ name: custom.name, rate: custom.rate, image: custom.image, qty: 1 });
     setCustom({ name: '', rate: '', image: '' });
     setCustomOpen(false);
@@ -131,7 +132,21 @@ const Collection = () => {
     totals: { discount: Number(discount) || 0, taxPercent: Number(taxPercent) || 0 }
   }), [items, customer, notes, discount, taxPercent]);
 
-  const canGenerate = items.length > 0 && customer.name.trim().length > 0;
+  // Every line needs a real price, and the quote needs a delivery date, before
+  // it can go out to a customer.
+  const unpricedCount = items.filter(i => !(Number(i.rate) > 0)).length;
+  const canGenerate =
+    items.length > 0 &&
+    customer.name.trim().length > 0 &&
+    Boolean(customer.deliveryDate) &&
+    unpricedCount === 0;
+
+  const blocker =
+    items.length === 0          ? 'Add items to continue'
+    : !customer.name.trim()     ? 'Customer name required'
+    : unpricedCount             ? `Enter a price for ${unpricedCount} item${unpricedCount > 1 ? 's' : ''}`
+    : !customer.deliveryDate    ? 'Delivery date required'
+    : '';
 
   // A stable signature of the current quote so we can tell whether a
   // previously prepared PDF is still up to date.
@@ -350,17 +365,9 @@ const Collection = () => {
         </div>
       )}
 
-      {items.length === 0 ? (
-        <div className="empty-state empty-state-rich">
-          <div className="empty-state-icon">
-            <FileText size={28} />
-          </div>
-          <h3>Your collection is empty</h3>
-          <p>Browse the catalog and use <strong>Add to Collection</strong> on any product to begin building a quote.</p>
-          <Link to="/catalog" className="btn btn-primary mt-4">Open Catalog</Link>
-        </div>
-      ) : (
-        <>
+      {/* The form always renders — a quote can be built entirely from custom
+          items, so an empty collection must not hide the rest of the page. */}
+      <>
           {/* ITEMS TABLE */}
           <section className="cs-section">
             <header className="cs-section-head">
@@ -383,6 +390,14 @@ const Collection = () => {
                   </tr>
                 </thead>
                 <tbody>
+                  {items.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="ctable-empty">
+                        <FileText size={18} />
+                        <span>No pieces yet — <Link to="/catalog">browse the catalog</Link> or use <strong>Add custom item</strong> above.</span>
+                      </td>
+                    </tr>
+                  )}
                   {items.map((it, idx) => {
                     const amount = (Number(it.rate) || 0) * (Number(it.qty) || 0);
                     return (
@@ -419,9 +434,9 @@ const Collection = () => {
                           </div>
                         </td>
                         <td>
-                          <input type="number" min={0} value={showNum(it.rate)} placeholder="0" onFocus={selectAll}
+                          <input type="number" min={1} value={showNum(it.rate)} placeholder="Required" onFocus={selectAll}
                             onChange={(e) => updateItem(it.id, { rate: Math.max(0, Number(e.target.value) || 0) })}
-                            className="ctable-input" />
+                            className={`ctable-input${Number(it.rate) > 0 ? '' : ' is-invalid'}`} />
                         </td>
                         <td>
                           <input type="text" placeholder="Notes for this item..."
@@ -503,7 +518,7 @@ const Collection = () => {
               <Field label="Interior name">
                 <input type="text" value={customer.interior} onChange={(e) => updateCustomer({ interior: e.target.value })} placeholder="Interior designer / firm name" />
               </Field>
-              <Field label="Expected delivery">
+              <Field label="Expected delivery *">
                 <input type="date" value={customer.deliveryDate} min={minDeliveryDate} onChange={onDeliveryDate} />
               </Field>
               <Field label="Delivery address" full>
@@ -523,11 +538,7 @@ const Collection = () => {
               {generatedQuote && <span className="action-bar-quote">Generated: {generatedQuote}</span>}
             </div>
             <div className="action-bar-buttons">
-              {!canGenerate && (
-                <span className="action-bar-warn">
-                  {items.length === 0 ? 'Add items to continue' : 'Customer name required'}
-                </span>
-              )}
+              {!canGenerate && <span className="action-bar-warn">{blocker}</span>}
               <button className="btn btn-ghost" disabled={!canGenerate} onClick={onDownload}>
                 <Download size={16} /> Download PDF
               </button>
@@ -539,8 +550,7 @@ const Collection = () => {
               </button>
             </div>
           </div>
-        </>
-      )}
+      </>
     </div>
   );
 };
