@@ -205,7 +205,7 @@ const Collection = () => {
     } else if (downloaded) {
       lines.push(``, `(The PDF has been downloaded to this device — please attach it.)`);
     }
-    lines.push(``, `Warm regards,`, `Comforto Furniture · Bopal, Ahmedabad`, `+91 94299 18571`);
+    lines.push(``, `Warm regards,`, `Comforto Furniture · Bopal, Ahmedabad`, `+91 94092 03078`);
     return lines.join('\n');
   };
 

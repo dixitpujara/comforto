@@ -9,7 +9,7 @@ const COMPANY = {
   name: 'Comforto Furniture',
   address: 'Bopal, Ahmedabad, Gujarat, India',
   hours: 'Mon–Sun · 10:30 AM to 8:30 PM',
-  phone: '+91 94299 18571',
+  phone: '+91 94092 03078',
   gst: '24AAOFC2033P1ZA'
 };
 

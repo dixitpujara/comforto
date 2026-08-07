@@ -4,7 +4,7 @@ import { ArrowRight, MapPin, Phone, Clock } from 'lucide-react';
 import logoLight from '../assets/logo-light.svg';
 import '../assets/css/SiteFooter.css';
 
-const WHATSAPP = "https://wa.me/919429918571?text=Hi%20Comforto%2C%20I'd%20like%20to%20visit%20the%20showroom.";
+const WHATSAPP = "https://wa.me/919409203078?text=Hi%20Comforto%2C%20I'd%20like%20to%20visit%20the%20showroom.";
 const MAPS = 'https://maps.google.com/?q=Comforto+Furniture+Bopal+Ahmedabad';
 
 const SiteFooter = () => (
@@ -31,8 +31,8 @@ const SiteFooter = () => (
           <span className="visit-fact">
             <Clock size={14} /> Mon – Sun · 10:30 AM – 8:30 PM
           </span>
-          <a href="tel:+919429918571" className="visit-fact">
-            <Phone size={14} /> +91 94299 18571
+          <a href="tel:+919409203078" className="visit-fact">
+            <Phone size={14} /> +91 94092 03078
           </a>
         </div>
       </div>
