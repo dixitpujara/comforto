@@ -10,7 +10,7 @@
 // (items, photos, customer, totals). Records with inline photos run to a few
 // hundred KB, so the list must never carry them.
 
-import { apiGet, apiPost, apiDelete, ApiUnavailable } from './client';
+import { apiGet, apiPost, apiDelete, ApiUnavailable, ApiError } from './client';
 
 const STORAGE_KEY = 'comforto_quotes_v1';
 
@@ -74,15 +74,36 @@ const writeLocal = (list) => {
   return list;
 };
 
+// ── Sync state ────────────────────────────────────────────────────────
+// Whether the last call actually reached the shared store. An empty list looks
+// identical whether nothing is saved or the device can't reach the server, so
+// the page needs to be able to tell the difference and say so.
+
+let syncState = { shared: false, reason: 'unknown' };
+
+export const getSyncState = () => syncState;
+
+const noteFailure = (e) => {
+  if (e instanceof ApiUnavailable)          syncState = { shared: false, reason: 'offline' };
+  else if (e instanceof ApiError && e.status === 401)
+                                            syncState = { shared: false, reason: 'signin' };
+  else                                      syncState = { shared: false, reason: 'error', message: e?.message || '' };
+  return syncState;
+};
+
 // ── Public API — server first, local fallback ─────────────────────────
+// Every call falls back to this browser's own list on ANY failure. A 401 (no
+// server session) or 500 (no store connected) must degrade the same way a
+// dropped connection does, never leave the caller with a rejected promise.
 
 /** Saved quotes as light summaries, newest first. */
 export async function listQuotes() {
   try {
     const index = await apiGet('/api/quotes');
+    syncState = { shared: true, reason: 'ok' };
     return Array.isArray(index) ? index : [];
   } catch (e) {
-    if (!(e instanceof ApiUnavailable)) throw e;
+    noteFailure(e);
     return readLocal().map(summarize);
   }
 }
@@ -90,9 +111,11 @@ export async function listQuotes() {
 /** The full record for one quote, or null. */
 export async function getQuote(id) {
   try {
-    return await apiGet(`/api/quotes?id=${encodeURIComponent(id)}`);
+    const record = await apiGet(`/api/quotes?id=${encodeURIComponent(id)}`);
+    syncState = { shared: true, reason: 'ok' };
+    return record;
   } catch (e) {
-    if (!(e instanceof ApiUnavailable)) throw e;
+    noteFailure(e);
     return readLocal().find(q => q.id === id) || null;
   }
 }
@@ -105,9 +128,11 @@ export async function getQuote(id) {
 export async function saveQuote(record) {
   try {
     const index = await apiPost('/api/quotes', record);
+    syncState = { shared: true, reason: 'ok' };
     return Array.isArray(index) ? index : [];
   } catch (e) {
-    if (!(e instanceof ApiUnavailable)) throw e;
+    noteFailure(e);
+    // Keep it on this device at least — the quote is never dropped on the floor.
     const rest = readLocal().filter(q => q.id !== record.id);
     return writeLocal([record, ...rest].slice(0, MAX_QUOTES)).map(summarize);
   }
@@ -116,9 +141,10 @@ export async function saveQuote(record) {
 export async function deleteQuote(id) {
   try {
     const index = await apiDelete(`/api/quotes?id=${encodeURIComponent(id)}`);
+    syncState = { shared: true, reason: 'ok' };
     return Array.isArray(index) ? index : [];
   } catch (e) {
-    if (!(e instanceof ApiUnavailable)) throw e;
+    noteFailure(e);
     return writeLocal(readLocal().filter(q => q.id !== id)).map(summarize);
   }
 }

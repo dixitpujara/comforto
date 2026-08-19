@@ -4,7 +4,7 @@ import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus
 import { useCollection } from '../context/CollectionContext';
 import { downloadQuotationPdf, quotationPdfFile, newQuoteNo } from '../utils/quotationPdf';
 import { apiPost } from '../api/client';
-import { listQuotes, getQuote, saveQuote, deleteQuote, formatQuoteNo, MAX_QUOTES } from '../api/quoteHistory';
+import { listQuotes, getQuote, saveQuote, deleteQuote, formatQuoteNo, getSyncState, MAX_QUOTES } from '../api/quoteHistory';
 import SafeImage from '../components/SafeImage';
 import '../assets/css/Collection.css';
 
@@ -136,12 +136,23 @@ const Collection = () => {
   const newDraft = () => ({ id: null, quoteNo: newQuoteNo(), revision: 1 });
   const [draft, setDraft]     = useState(newDraft);
   const [history, setHistory] = useState([]);
+  const [sync, setSync]       = useState({ shared: false, reason: 'unknown' });
+
+  const applyHistory = (list) => { setHistory(list); setSync(getSyncState()); };
 
   useEffect(() => {
     let alive = true;
-    listQuotes().then(list => { if (alive) setHistory(list); });
+    listQuotes().then(list => { if (alive) applyHistory(list); });
     return () => { alive = false; };
   }, []);
+
+  // An empty list looks the same whether nothing is saved or this device can't
+  // reach the shared store — so say which it is.
+  const syncNote =
+    sync.shared || sync.reason === 'unknown' ? ''
+    : sync.reason === 'signin' ? 'Showing this device only — sign out and sign in again to see everyone’s quotes.'
+    : sync.reason === 'offline' ? 'Showing this device only — no connection to the shared store.'
+    : 'Showing this device only — the shared store could not be reached.';
 
   const displayQuoteNo = draft.quoteNo ? formatQuoteNo(draft.quoteNo, draft.revision) : '';
 
@@ -177,7 +188,7 @@ const Collection = () => {
     // Everything here is captured from this render, so it stays correct even
     // though the builder is cleared immediately afterwards.
     try {
-      setHistory(await saveQuote({
+      applyHistory(await saveQuote({
         id: draft.id || `q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         quoteNo: draft.quoteNo,
         revision: draft.revision,
@@ -229,7 +240,7 @@ const Collection = () => {
   const removeQuote = async (record) => {
     if (!confirm(`Delete saved quote ${formatQuoteNo(record.quoteNo, record.revision)}?`)) return;
     try {
-      setHistory(await deleteQuote(record.id));
+      applyHistory(await deleteQuote(record.id));
       if (draft.id === record.id) setDraft(d => ({ ...d, id: null }));
     } catch {
       alert('Could not delete that quote. Please try again.');
@@ -410,12 +421,17 @@ const Collection = () => {
     <div className="collection container animate-fade-in">
       {/* Saved quotes come first: reopening an existing job is the usual reason
           to land here, and building a new one continues below. */}
-      {history.length > 0 && (
+      {(history.length > 0 || syncNote) && (
         <section className="qh-section">
           <header className="qh-head">
             <span className="eyebrow">Recent quotes</span>
-            <span className="qh-hint">Open one to update it · last {Math.min(history.length, MAX_QUOTES)}</span>
+            <span className="qh-hint">
+              {history.length > 0
+                ? `Open one to update it · last ${Math.min(history.length, MAX_QUOTES)}`
+                : 'No saved quotes yet'}
+            </span>
           </header>
+          {syncNote && <p className="qh-warn">{syncNote}</p>}
           <ul className="qh-list">
             {history.map(q => (
               <li key={q.id} className={`qh-row${draft.id === q.id ? ' is-active' : ''}`}>
