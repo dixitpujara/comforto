@@ -60,11 +60,17 @@ function urlToThumbDataURL(url) {
   });
 }
 
+/** A fresh quotation number. Callers hold on to it so a reopened quote keeps
+ *  its number across revisions. */
+export const newQuoteNo = () => `CMF-${Date.now().toString().slice(-8)}`;
+
 /**
  * Generate a branded quotation PDF.
  * Async because product thumbnails are fetched and embedded.
+ * Pass `quoteNo` to reprint an existing quote (e.g. "CMF-12345678-R2");
+ * omit it and a new number is minted.
  */
-export async function buildQuotationPdf({ items, customer, notes, totals = {} }) {
+export async function buildQuotationPdf({ items, customer, notes, totals = {}, quoteNo: givenQuoteNo }) {
   const doc    = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageW  = doc.internal.pageSize.getWidth();
   const pageH  = doc.internal.pageSize.getHeight();
@@ -75,7 +81,7 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {} })
   const matThumbs = await Promise.all(items.map(it => urlToThumbDataURL(it.materialImage)));
   const anyMaterial = matThumbs.some(Boolean);
 
-  const quoteNo  = `CMF-${Date.now().toString().slice(-8)}`;
+  const quoteNo  = givenQuoteNo || newQuoteNo();
   const today    = new Date();
   const fmtDate  = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const dateStr  = fmtDate(today);

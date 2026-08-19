@@ -133,6 +133,14 @@ export const CollectionProvider = ({ children }) => {
 
   const clearCollection = () => setState({ items: [], customer: emptyCustomer, notes: emptyNotes });
 
+  // Replace the whole builder with a previously saved quote, so staff can
+  // reopen and update it days after the PDF went out.
+  const loadCollection = ({ items = [], customer = {}, notes = {} } = {}) => setState({
+    items:    Array.isArray(items) ? items : [],
+    customer: { ...emptyCustomer, ...customer },
+    notes:    { customer: notes.customer || '' }
+  });
+
   const subtotal = state.items.reduce((sum, i) => sum + (Number(i.rate) || 0) * (Number(i.qty) || 0), 0);
 
   return (
@@ -143,7 +151,7 @@ export const CollectionProvider = ({ children }) => {
       subtotal,
       count:    state.items.length,
       addItem, addCustomItem, updateItem, removeItem, isInCollection,
-      updateCustomer, updateNotes, clearCollection
+      updateCustomer, updateNotes, clearCollection, loadCollection
     }}>
       {children}
     </CollectionContext.Provider>

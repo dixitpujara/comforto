@@ -2,8 +2,9 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus } from 'lucide-react';
 import { useCollection } from '../context/CollectionContext';
-import { downloadQuotationPdf, quotationPdfFile } from '../utils/quotationPdf';
+import { downloadQuotationPdf, quotationPdfFile, newQuoteNo } from '../utils/quotationPdf';
 import { apiPost } from '../api/client';
+import { listQuotes, saveQuote, deleteQuote, formatQuoteNo, MAX_QUOTES } from '../api/quoteHistory';
 import SafeImage from '../components/SafeImage';
 import '../assets/css/Collection.css';
 
@@ -41,7 +42,7 @@ const readPhotoAsDataUrl = (file, maxDim = MAX_PHOTO_DIM) => new Promise((resolv
 const Collection = () => {
   const {
     items, customer, notes, subtotal,
-    addCustomItem, updateItem, removeItem, updateCustomer, updateNotes, clearCollection
+    addCustomItem, updateItem, removeItem, updateCustomer, updateNotes, clearCollection, loadCollection
   } = useCollection();
 
   const [discount, setDiscount]       = useState(0);
@@ -127,10 +128,29 @@ const Collection = () => {
   const showNum = (n) => (Number(n) === 0 ? '' : n);
   const selectAll = (e) => e.target.select();
 
+  // ── Quote identity & history ─────────────────────────────────────
+  // draft.quoteNo is minted once the quote is complete and then held, so the
+  // number baked into the pre-built PDF is the one that gets saved. Reopening a
+  // saved quote carries its number forward and steps the revision, which is
+  // what puts the -R2 suffix on the next PDF.
+  const newDraft = () => ({ id: null, quoteNo: newQuoteNo(), revision: 1 });
+  const [draft, setDraft]     = useState(newDraft);
+  const [history, setHistory] = useState([]);
+
+  const refreshHistory = async () => setHistory(await listQuotes());
+  useEffect(() => {
+    let alive = true;
+    listQuotes().then(list => { if (alive) setHistory(list); });
+    return () => { alive = false; };
+  }, []);
+
+  const displayQuoteNo = draft.quoteNo ? formatQuoteNo(draft.quoteNo, draft.revision) : '';
+
   const args = useMemo(() => ({
     items, customer, notes,
-    totals: { discount: Number(discount) || 0, taxPercent: Number(taxPercent) || 0 }
-  }), [items, customer, notes, discount, taxPercent]);
+    totals: { discount: Number(discount) || 0, taxPercent: Number(taxPercent) || 0 },
+    quoteNo: displayQuoteNo || undefined
+  }), [items, customer, notes, discount, taxPercent, displayQuoteNo]);
 
   // Every line needs a real price, and the quote needs a delivery date, before
   // it can go out to a customer.
@@ -147,6 +167,53 @@ const Collection = () => {
     : unpricedCount             ? `Enter a price for ${unpricedCount} item${unpricedCount > 1 ? 's' : ''}`
     : !customer.deliveryDate    ? 'Delivery date required'
     : '';
+
+  // Record this quote in the history after it goes out. A reopened quote
+  // updates its own record (same id) rather than adding a near-duplicate.
+  const persistQuote = async (quoteNo) => {
+    // Everything here is captured from this render, so it stays correct even
+    // though the builder is cleared immediately afterwards.
+    await saveQuote({
+      id: draft.id || `q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      quoteNo: draft.quoteNo,
+      revision: draft.revision,
+      printedNo: quoteNo,
+      savedAt: new Date().toISOString(),
+      grandTotal,
+      items, customer, notes,
+      totals: { discount: Number(discount) || 0, taxPercent: Number(taxPercent) || 0 }
+    });
+    refreshHistory();
+  };
+
+  // Once the PDF is out and safely in Recent quotes, hand back an empty builder
+  // ready for the next customer. The new draft id/number matters: without it the
+  // next quote would save over the one just sent.
+  const startNewQuote = () => {
+    clearCollection();
+    setDraft(newDraft());
+    setDiscount(0);
+    setTaxPercent(18);
+  };
+
+  const openQuote = (record) => {
+    if (items.length && !confirm('Replace what you are working on with this saved quote?')) return;
+    loadCollection(record);
+    setDiscount(Number(record.totals?.discount) || 0);
+    setTaxPercent(Number(record.totals?.taxPercent) || 0);
+    // The next send is the next revision of this quote.
+    setDraft({ id: record.id, quoteNo: record.quoteNo, revision: (Number(record.revision) || 1) + 1 });
+    setGeneratedQuote(null);
+    // The list sits above the builder, so bring the builder itself into view.
+    document.querySelector('.collection-head')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const removeQuote = async (record) => {
+    if (!confirm(`Delete saved quote ${formatQuoteNo(record.quoteNo, record.revision)}?`)) return;
+    await deleteQuote(record.id);
+    if (draft.id === record.id) setDraft(d => ({ ...d, id: null }));
+    refreshHistory();
+  };
 
   // A stable signature of the current quote so we can tell whether a
   // previously prepared PDF is still up to date.
@@ -176,6 +243,8 @@ const Collection = () => {
   const onDownload = async () => {
     const quoteNo = await downloadQuotationPdf(args);
     setGeneratedQuote(quoteNo);
+    await persistQuote(quoteNo);
+    startNewQuote();
   };
 
   // Force-download a generated blob (fallback when the device can't share files).
@@ -260,6 +329,7 @@ const Collection = () => {
     }
     const { file, blob, fileName, quoteNo } = pdf;
     setGeneratedQuote(quoteNo);
+    await persistQuote(quoteNo);
 
     // Primary: native share with the actual PDF file + message.
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -270,8 +340,11 @@ const Collection = () => {
           text: buildMessage(quoteNo, null, false),
         });
         if (targetWin) targetWin.close();
+        startNewQuote();
         return;
       } catch (err) {
+        // Cancelled the share sheet — leave the builder as it is so they can
+        // simply tap send again.
         if (err && err.name === 'AbortError') { if (targetWin) targetWin.close(); return; }
         // Otherwise fall through to the link / download path.
       }
@@ -294,6 +367,7 @@ const Collection = () => {
       const subject = `Quotation ${quoteNo} from Comforto Furniture`;
       window.location.href = `mailto:${customer.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
     }
+    startNewQuote();
   };
 
   const onWhatsApp = () => {
@@ -314,6 +388,39 @@ const Collection = () => {
 
   return (
     <div className="collection container animate-fade-in">
+      {/* Saved quotes come first: reopening an existing job is the usual reason
+          to land here, and building a new one continues below. */}
+      {history.length > 0 && (
+        <section className="qh-section">
+          <header className="qh-head">
+            <span className="eyebrow">Recent quotes</span>
+            <span className="qh-hint">Open one to update it · last {Math.min(history.length, MAX_QUOTES)}</span>
+          </header>
+          <ul className="qh-list">
+            {history.map(q => (
+              <li key={q.id} className={`qh-row${draft.id === q.id ? ' is-active' : ''}`}>
+                <div className="qh-main">
+                  <span className="qh-no">{formatQuoteNo(q.quoteNo, q.revision)}</span>
+                  <span className="qh-name">{q.customer?.name || '—'}</span>
+                  {q.customer?.projectName && <span className="qh-project">{q.customer.projectName}</span>}
+                </div>
+                <div className="qh-meta">
+                  <span className="qh-date">{new Date(q.savedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                  <span className="qh-total">{formatINR(q.grandTotal)}</span>
+                  <span className="qh-count">{(q.items || []).length} items</span>
+                </div>
+                <div className="qh-actions">
+                  <button className="btn btn-ghost btn-small" onClick={() => openQuote(q)}>Open</button>
+                  <button className="row-remove" onClick={() => removeQuote(q)} title="Delete saved quote">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="collection-head">
         <div>
           <span className="eyebrow">Quotation Builder</span>
@@ -325,7 +432,13 @@ const Collection = () => {
             <Plus size={16} /> Add custom item
           </button>
           {items.length > 0 && (
-            <button className="btn btn-ghost" onClick={() => { if (confirm('Clear collection and customer info?')) clearCollection(); }}>
+            <button className="btn btn-ghost" onClick={() => {
+              if (!confirm('Clear collection and customer info?')) return;
+              clearCollection();
+              // Start a genuinely new quote, not another revision of the last one.
+              setDraft(newDraft());
+              setGeneratedQuote(null);
+            }}>
               <Trash2 size={16} /> Clear all
             </button>
           )}
@@ -534,8 +647,13 @@ const Collection = () => {
           <div className="action-bar">
             <div className="action-bar-info">
               <span className="action-bar-total">{formatINR(grandTotal)}</span>
-              <span className="action-bar-meta">{items.length} items · for {customer.name || '—'}</span>
-              {generatedQuote && <span className="action-bar-quote">Generated: {generatedQuote}</span>}
+              <span className="action-bar-meta">
+                {items.length} items · for {customer.name || '—'}
+                {draft.revision > 1 && displayQuoteNo && ` · updating ${displayQuoteNo}`}
+              </span>
+              {generatedQuote && (
+                <span className="action-bar-quote">{generatedQuote} sent · saved to Recent quotes</span>
+              )}
             </div>
             <div className="action-bar-buttons">
               {!canGenerate && <span className="action-bar-warn">{blocker}</span>}
