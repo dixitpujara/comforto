@@ -1,12 +1,16 @@
-// Recent-quote history — the most recent quotations a staff member generated,
-// so a quote can be reopened and updated days later instead of rebuilt from
-// scratch. MAX_QUOTES is the only knob; the write below sheds the oldest
-// records if the browser's storage fills before that limit is reached.
+// Recent-quote history — the most recent quotations staff generated, so a quote
+// can be reopened and updated days later instead of rebuilt from scratch.
 //
-// Backed by localStorage on the device that created the quote. Every function
-// is async and addresses records by id, so this module can later be swapped for
-// a `/api/quotes` client (Vercel KV, the way the catalog and users already
-// work) without changing a single call site.
+// Backed by /api/quotes (Vercel KV) so the same list appears for every signed-in
+// staff member on any device. During local `vite dev` — and if the network or
+// the store is unavailable — it falls back to this browser's localStorage, the
+// same pattern the catalog and users already use.
+//
+// listQuotes() returns light summaries; getQuote(id) returns the full record
+// (items, photos, customer, totals). Records with inline photos run to a few
+// hundred KB, so the list must never carry them.
+
+import { apiGet, apiPost, apiDelete, ApiUnavailable } from './client';
 
 const STORAGE_KEY = 'comforto_quotes_v1';
 
@@ -17,7 +21,21 @@ export const MAX_QUOTES = 25;
 export const formatQuoteNo = (quoteNo, revision) =>
   Number(revision) > 1 ? `${quoteNo}-R${revision}` : quoteNo;
 
-const read = () => {
+export const summarize = (q) => ({
+  id: q.id,
+  quoteNo: q.quoteNo,
+  revision: Number(q.revision) || 1,
+  printedNo: q.printedNo || q.quoteNo,
+  savedAt: q.savedAt,
+  grandTotal: Number(q.grandTotal) || 0,
+  customerName: q.customer?.name || '',
+  projectName: q.customer?.projectName || '',
+  itemCount: Array.isArray(q.items) ? q.items.length : 0,
+});
+
+// ── Local fallback (per-browser) ──────────────────────────────────────
+
+const readLocal = () => {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     return Array.isArray(parsed) ? parsed : [];
@@ -38,7 +56,7 @@ const stripPhotos = (record) => ({
 // Photo-heavy quotes can push the browser past its storage quota. Shed the
 // oldest records first, then inline photos, rather than letting the write throw
 // — losing an old quote beats losing the whole history.
-const write = (list) => {
+const writeLocal = (list) => {
   const attempt = (candidate) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(candidate));
     return candidate;
@@ -48,7 +66,7 @@ const write = (list) => {
 
   const trimmed = [...list];
   while (trimmed.length > 1) {
-    trimmed.pop();                                    // drop the oldest
+    trimmed.pop();
     try { return attempt(trimmed); } catch { /* keep shedding */ }
   }
 
@@ -56,13 +74,27 @@ const write = (list) => {
   return list;
 };
 
-/** Saved quotes, newest first. */
+// ── Public API — server first, local fallback ─────────────────────────
+
+/** Saved quotes as light summaries, newest first. */
 export async function listQuotes() {
-  return read();
+  try {
+    const index = await apiGet('/api/quotes');
+    return Array.isArray(index) ? index : [];
+  } catch (e) {
+    if (!(e instanceof ApiUnavailable)) throw e;
+    return readLocal().map(summarize);
+  }
 }
 
+/** The full record for one quote, or null. */
 export async function getQuote(id) {
-  return read().find(q => q.id === id) || null;
+  try {
+    return await apiGet(`/api/quotes?id=${encodeURIComponent(id)}`);
+  } catch (e) {
+    if (!(e instanceof ApiUnavailable)) throw e;
+    return readLocal().find(q => q.id === id) || null;
+  }
 }
 
 /**
@@ -71,10 +103,22 @@ export async function getQuote(id) {
  * rather than filling the list with revisions of the same job.
  */
 export async function saveQuote(record) {
-  const rest = read().filter(q => q.id !== record.id);
-  return write([record, ...rest].slice(0, MAX_QUOTES));
+  try {
+    const index = await apiPost('/api/quotes', record);
+    return Array.isArray(index) ? index : [];
+  } catch (e) {
+    if (!(e instanceof ApiUnavailable)) throw e;
+    const rest = readLocal().filter(q => q.id !== record.id);
+    return writeLocal([record, ...rest].slice(0, MAX_QUOTES)).map(summarize);
+  }
 }
 
 export async function deleteQuote(id) {
-  return write(read().filter(q => q.id !== id));
+  try {
+    const index = await apiDelete(`/api/quotes?id=${encodeURIComponent(id)}`);
+    return Array.isArray(index) ? index : [];
+  } catch (e) {
+    if (!(e instanceof ApiUnavailable)) throw e;
+    return writeLocal(readLocal().filter(q => q.id !== id)).map(summarize);
+  }
 }

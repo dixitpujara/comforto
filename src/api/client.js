@@ -80,3 +80,4 @@ const request = async (path, { method = 'GET', body } = {}) => {
 export const apiGet = (path) => request(path);
 export const apiPut = (path, body) => request(path, { method: 'PUT', body });
 export const apiPost = (path, body) => request(path, { method: 'POST', body });
+export const apiDelete = (path) => request(path, { method: 'DELETE' });

@@ -4,7 +4,7 @@ import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus
 import { useCollection } from '../context/CollectionContext';
 import { downloadQuotationPdf, quotationPdfFile, newQuoteNo } from '../utils/quotationPdf';
 import { apiPost } from '../api/client';
-import { listQuotes, saveQuote, deleteQuote, formatQuoteNo, MAX_QUOTES } from '../api/quoteHistory';
+import { listQuotes, getQuote, saveQuote, deleteQuote, formatQuoteNo, MAX_QUOTES } from '../api/quoteHistory';
 import SafeImage from '../components/SafeImage';
 import '../assets/css/Collection.css';
 
@@ -137,7 +137,6 @@ const Collection = () => {
   const [draft, setDraft]     = useState(newDraft);
   const [history, setHistory] = useState([]);
 
-  const refreshHistory = async () => setHistory(await listQuotes());
   useEffect(() => {
     let alive = true;
     listQuotes().then(list => { if (alive) setHistory(list); });
@@ -172,20 +171,27 @@ const Collection = () => {
 
   // Record this quote in the history after it goes out. A reopened quote
   // updates its own record (same id) rather than adding a near-duplicate.
+  // Returns false if the quote could not be stored — the caller must then leave
+  // the builder alone rather than clearing work that was never saved anywhere.
   const persistQuote = async (quoteNo) => {
     // Everything here is captured from this render, so it stays correct even
     // though the builder is cleared immediately afterwards.
-    await saveQuote({
-      id: draft.id || `q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      quoteNo: draft.quoteNo,
-      revision: draft.revision,
-      printedNo: quoteNo,
-      savedAt: new Date().toISOString(),
-      grandTotal,
-      items, customer, notes,
-      totals: { discount: Number(discount) || 0, taxPercent: Number(taxPercent) || 0 }
-    });
-    refreshHistory();
+    try {
+      setHistory(await saveQuote({
+        id: draft.id || `q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        quoteNo: draft.quoteNo,
+        revision: draft.revision,
+        printedNo: quoteNo,
+        savedAt: new Date().toISOString(),
+        grandTotal,
+        items, customer, notes,
+        totals: { discount: Number(discount) || 0, taxPercent: Number(taxPercent) || 0 }
+      }));
+      return true;
+    } catch {
+      alert('The PDF was created, but this quote could not be saved to Recent quotes. Your work is still here — check the connection and send again to save it.');
+      return false;
+    }
   };
 
   // Once the PDF is out and safely in Recent quotes, hand back an empty builder
@@ -198,8 +204,18 @@ const Collection = () => {
     setTaxPercent(18);
   };
 
-  const openQuote = (record) => {
+  // The list holds summaries only (full records carry photos), so fetch the
+  // quote itself before loading it into the builder.
+  const openQuote = async (summary) => {
     if (items.length && !confirm('Replace what you are working on with this saved quote?')) return;
+    let record;
+    try {
+      record = await getQuote(summary.id);
+    } catch {
+      record = null;
+    }
+    if (!record) { alert('Could not open that quote. Please try again.'); return; }
+
     loadCollection(record);
     setDiscount(Number(record.totals?.discount) || 0);
     setTaxPercent(Number(record.totals?.taxPercent) || 0);
@@ -212,9 +228,12 @@ const Collection = () => {
 
   const removeQuote = async (record) => {
     if (!confirm(`Delete saved quote ${formatQuoteNo(record.quoteNo, record.revision)}?`)) return;
-    await deleteQuote(record.id);
-    if (draft.id === record.id) setDraft(d => ({ ...d, id: null }));
-    refreshHistory();
+    try {
+      setHistory(await deleteQuote(record.id));
+      if (draft.id === record.id) setDraft(d => ({ ...d, id: null }));
+    } catch {
+      alert('Could not delete that quote. Please try again.');
+    }
   };
 
   // A stable signature of the current quote so we can tell whether a
@@ -245,8 +264,7 @@ const Collection = () => {
   const onDownload = async () => {
     const quoteNo = await downloadQuotationPdf(args);
     setGeneratedQuote(quoteNo);
-    await persistQuote(quoteNo);
-    startNewQuote();
+    if (await persistQuote(quoteNo)) startNewQuote();
   };
 
   // Force-download a generated blob (fallback when the device can't share files).
@@ -331,7 +349,7 @@ const Collection = () => {
     }
     const { file, blob, fileName, quoteNo } = pdf;
     setGeneratedQuote(quoteNo);
-    await persistQuote(quoteNo);
+    const saved = await persistQuote(quoteNo);
 
     // Primary: native share with the actual PDF file + message.
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -342,7 +360,7 @@ const Collection = () => {
           text: buildMessage(quoteNo, null, false),
         });
         if (targetWin) targetWin.close();
-        startNewQuote();
+        if (saved) startNewQuote();
         return;
       } catch (err) {
         // Cancelled the share sheet — leave the builder as it is so they can
@@ -369,7 +387,7 @@ const Collection = () => {
       const subject = `Quotation ${quoteNo} from Comforto Furniture`;
       window.location.href = `mailto:${customer.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
     }
-    startNewQuote();
+    if (saved) startNewQuote();
   };
 
   const onWhatsApp = () => {
@@ -403,13 +421,13 @@ const Collection = () => {
               <li key={q.id} className={`qh-row${draft.id === q.id ? ' is-active' : ''}`}>
                 <div className="qh-main">
                   <span className="qh-no">{formatQuoteNo(q.quoteNo, q.revision)}</span>
-                  <span className="qh-name">{q.customer?.name || '—'}</span>
-                  {q.customer?.projectName && <span className="qh-project">{q.customer.projectName}</span>}
+                  <span className="qh-name">{q.customerName || '—'}</span>
+                  {q.projectName && <span className="qh-project">{q.projectName}</span>}
                 </div>
                 <div className="qh-meta">
                   <span className="qh-date">{new Date(q.savedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                   <span className="qh-total">{formatINR(q.grandTotal)}</span>
-                  <span className="qh-count">{(q.items || []).length} items</span>
+                  <span className="qh-count">{q.itemCount} items</span>
                 </div>
                 <div className="qh-actions">
                   <button className="btn btn-ghost btn-small" onClick={() => openQuote(q)}>Open</button>
