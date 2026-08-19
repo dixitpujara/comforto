@@ -161,8 +161,10 @@ const Collection = () => {
     Boolean(customer.deliveryDate) &&
     unpricedCount === 0;
 
+  // Nothing added yet needs no warning — the buttons are disabled and the empty
+  // table already says where pieces come from.
   const blocker =
-    items.length === 0          ? 'Add items to continue'
+    items.length === 0          ? ''
     : !customer.name.trim()     ? 'Customer name required'
     : unpricedCount             ? `Enter a price for ${unpricedCount} item${unpricedCount > 1 ? 's' : ''}`
     : !customer.deliveryDate    ? 'Delivery date required'
@@ -647,10 +649,14 @@ const Collection = () => {
           <div className="action-bar">
             <div className="action-bar-info">
               <span className="action-bar-total">{formatINR(grandTotal)}</span>
-              <span className="action-bar-meta">
-                {items.length} items · for {customer.name || '—'}
-                {draft.revision > 1 && displayQuoteNo && ` · updating ${displayQuoteNo}`}
-              </span>
+              {/* With nothing in the collection this only repeats the warning
+                  beside the buttons, and it crowds the sent-confirmation. */}
+              {items.length > 0 && (
+                <span className="action-bar-meta">
+                  {items.length} items · for {customer.name || '—'}
+                  {draft.revision > 1 && displayQuoteNo && ` · updating ${displayQuoteNo}`}
+                </span>
+              )}
               {generatedQuote && (
                 <span className="action-bar-quote">{generatedQuote} sent · saved to Recent quotes</span>
               )}

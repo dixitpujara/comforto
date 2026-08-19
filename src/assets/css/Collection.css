@@ -554,7 +554,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  flex-wrap: wrap;
+  /* One line: the buttons and the sent-confirmation always stay put, and the
+     "N items · for …" text truncates first when space runs short. */
+  flex-wrap: nowrap;
   box-shadow: var(--shadow-lg);
   margin-top: 1.5rem;
   border: 1px solid rgba(201, 166, 107, 0.25);
@@ -563,16 +565,21 @@
   display: flex;
   align-items: baseline;
   gap: 1rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;                 /* lets the meta text shrink instead of pushing */
 }
 .action-bar-total {
   font-family: var(--font-serif);
   font-size: 1.35rem;
   color: var(--color-accent);
+  flex-shrink: 0;
 }
 .action-bar-meta {
   font-size: 0.82rem;
   opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .action-bar-quote {
   font-size: 0.74rem;
@@ -582,18 +589,23 @@
   color: var(--color-accent);
   padding: 0.25rem 0.75rem;
   border-radius: var(--radius-pill);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .action-bar-buttons {
   display: flex;
   gap: 0.55rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
+  flex-shrink: 0;
 }
 .action-bar-warn {
   font-size: 0.78rem;
   color: #ffd9b3;
   margin-right: 0.5rem;
+  white-space: nowrap;
 }
+.action-bar .btn { white-space: nowrap; }
 .action-bar .btn { padding: 0.6rem 1.15rem; }
 .action-bar .btn-ghost {
   background: rgba(255, 255, 255, 0.08);
@@ -611,7 +623,10 @@
 }
 @media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr; }
-  .action-bar { flex-direction: column; align-items: stretch; border-radius: var(--radius-lg); }
-  .action-bar-buttons { justify-content: stretch; }
+  /* Too narrow for one line — stack, and let both rows wrap again. */
+  .action-bar { flex-direction: column; align-items: stretch; border-radius: var(--radius-lg); flex-wrap: wrap; }
+  .action-bar-info { flex-wrap: wrap; }
+  .action-bar-meta { white-space: normal; overflow: visible; }
+  .action-bar-buttons { justify-content: stretch; flex-wrap: wrap; }
   .action-bar-buttons .btn { flex: 1; }
 }

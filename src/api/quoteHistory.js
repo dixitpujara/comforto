@@ -1,5 +1,7 @@
-// Recent-quote history — the last 10 quotations a staff member generated, so a
-// quote can be reopened and updated days later instead of rebuilt from scratch.
+// Recent-quote history — the most recent quotations a staff member generated,
+// so a quote can be reopened and updated days later instead of rebuilt from
+// scratch. MAX_QUOTES is the only knob; the write below sheds the oldest
+// records if the browser's storage fills before that limit is reached.
 //
 // Backed by localStorage on the device that created the quote. Every function
 // is async and addresses records by id, so this module can later be swapped for
@@ -8,7 +10,7 @@
 
 const STORAGE_KEY = 'comforto_quotes_v1';
 
-export const MAX_QUOTES = 10;
+export const MAX_QUOTES = 25;
 
 // Display form of a quote number: revision 1 prints bare, later revisions carry
 // an -R suffix so the customer can tell which PDF is the newest.
