@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { productsData as seedData } from '../data/products';
 import { useAuth } from './AuthContext';
 import { apiGet, apiPut, ApiUnavailable } from '../api/client';
+import { warmImageCache } from '../lib/registerSW';
 
 const ProductsContext = createContext();
 export const useProducts = () => useContext(ProductsContext);
@@ -83,6 +84,34 @@ export const ProductsProvider = ({ children }) => {
 
   // Everyone — visitors and staff — reads the shared catalog.
   const live = draft;
+
+  // Product photos are hosted off-site, so the catalog would lose its pictures
+  // whenever the site is unreachable. Pull them into the cache in the background
+  // while there's a connection, once per catalog revision.
+  const warmedRef = useRef('');
+  useEffect(() => {
+    const products = live?.products;
+    if (!Array.isArray(products) || !products.length) return;
+
+    const urls = [];
+    for (const p of products) {
+      if (p.image) urls.push(p.image);
+      if (Array.isArray(p.images)) urls.push(...p.images);
+      if (Array.isArray(p.variants)) for (const v of p.variants) if (v.image) urls.push(v.image);
+    }
+    const signature = String(urls.length) + (urls[0] || '');
+    if (!urls.length || warmedRef.current === signature) return;
+    warmedRef.current = signature;
+
+    // Idle time only — never in front of what the staff member is doing.
+    const start = () => { warmImageCache(urls).catch(() => {}); };
+    const idle = window.requestIdleCallback?.(start, { timeout: 8000 });
+    const timer = idle === undefined ? setTimeout(start, 3000) : null;
+    return () => {
+      if (timer) clearTimeout(timer);
+      else window.cancelIdleCallback?.(idle);
+    };
+  }, [live]);
 
   const hasUnexportedChanges = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(seedData),

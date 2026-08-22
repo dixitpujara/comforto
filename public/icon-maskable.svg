@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" font-family="'Playfair Display', Georgia, 'Times New Roman', serif">
+  <!-- Maskable: full-bleed background, mark kept inside the 80% safe circle
+       (radius 25.6 on this viewBox) so Android can crop it to any shape. -->
+  <rect width="64" height="64" fill="#1A1A1A"/>
+  <circle cx="32" cy="32" r="19" fill="#C9A66B"/>
+  <circle cx="32" cy="32" r="16" fill="none" stroke="#A78650" stroke-width="0.6" opacity="0.55"/>
+  <text x="32" y="32" text-anchor="middle" dominant-baseline="central" font-size="24" font-weight="600" fill="#1A1A1A">C</text>
+</svg>

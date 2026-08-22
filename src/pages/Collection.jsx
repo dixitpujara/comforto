@@ -4,7 +4,7 @@ import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus
 import { useCollection } from '../context/CollectionContext';
 import { downloadQuotationPdf, quotationPdfFile, newQuoteNo } from '../utils/quotationPdf';
 import { apiPost } from '../api/client';
-import { listQuotes, getQuote, saveQuote, deleteQuote, formatQuoteNo, getSyncState, MAX_QUOTES } from '../api/quoteHistory';
+import { listQuotes, syncQuotes, getQuote, saveQuote, deleteQuote, formatQuoteNo, getSyncState, onSyncChange, MAX_QUOTES } from '../api/quoteHistory';
 import SafeImage from '../components/SafeImage';
 import '../assets/css/Collection.css';
 
@@ -136,23 +136,35 @@ const Collection = () => {
   const newDraft = () => ({ id: null, quoteNo: newQuoteNo(), revision: 1 });
   const [draft, setDraft]     = useState(newDraft);
   const [history, setHistory] = useState([]);
-  const [sync, setSync]       = useState({ shared: false, reason: 'unknown' });
+  const [sync, setSync]       = useState({ shared: false, reason: 'unknown', pending: 0 });
 
-  const applyHistory = (list) => { setHistory(list); setSync(getSyncState()); };
+  const applyHistory = (list) => { setHistory(list); setSync({ ...getSyncState() }); };
 
   useEffect(() => {
     let alive = true;
-    listQuotes().then(list => { if (alive) applyHistory(list); });
-    return () => { alive = false; };
+    (async () => {
+      // Offline-first: paint this device's list straight from IndexedDB, then
+      // reconcile with the shared store in the background.
+      applyHistory(await listQuotes());
+      const merged = await syncQuotes();
+      if (alive) applyHistory(merged);
+    })();
+    // The outbox can drain later (reconnect, tab refocus) — follow along.
+    const off = onSyncChange(s => { if (alive) setSync({ ...s }); });
+    return () => { alive = false; off(); };
   }, []);
 
   // An empty list looks the same whether nothing is saved or this device can't
   // reach the shared store — so say which it is.
+  const pending = Number(sync.pending) || 0;
   const syncNote =
-    sync.shared || sync.reason === 'unknown' ? ''
-    : sync.reason === 'signin' ? 'Showing this device only — sign out and sign in again to see everyone’s quotes.'
-    : sync.reason === 'offline' ? 'Showing this device only — no connection to the shared store.'
-    : 'Showing this device only — the shared store could not be reached.';
+    sync.reason === 'unknown' ? ''
+    : sync.reason === 'signin' ? 'Not syncing — sign out and sign in again to share quotes with other devices.'
+    : sync.reason === 'offline'
+      ? `Offline — quotes are saved on this device${pending ? ` (${pending} waiting to sync)` : ''} and upload when you reconnect.`
+    : !sync.shared ? 'Not syncing — the shared store could not be reached.'
+    : pending ? `${pending} quote${pending > 1 ? 's' : ''} waiting to sync.`
+    : '';
 
   const displayQuoteNo = draft.quoteNo ? formatQuoteNo(draft.quoteNo, draft.revision) : '';
 

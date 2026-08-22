@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { idbGet, idbPut, STORE_KV } from '../lib/idb';
 
 /**
  * Collection / quotation builder state.
@@ -9,13 +10,17 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
  * customer: { name, mobile, email, address, projectName, projectType, deliveryDate, deliveryAddress }
  * notes:    { customer }  — the only free-text note; terms are fixed in the PDF
  *
- * Persisted to localStorage so staff don't lose work between sessions.
+ * Persisted to IndexedDB so staff don't lose work between sessions. It holds the
+ * draft's inline photos comfortably, which localStorage's ~5MB string budget did
+ * not — an over-quota write there used to throw during commit and unmount the
+ * whole app. Anything saved by the old version is imported once on first load.
  */
 
 const CollectionContext = createContext();
 export const useCollection = () => useContext(CollectionContext);
 
-const STORAGE_KEY = 'comforto_collection_v1';
+const STORAGE_KEY = 'comforto_collection_v1';   // legacy localStorage key
+const DRAFT_KEY   = 'collectionDraft';          // key inside the IndexedDB kv store
 
 const emptyCustomer = {
   name: '', mobile: '', email: '',
@@ -28,44 +33,51 @@ const emptyCustomer = {
 // (see STANDARD_TERMS in utils/quotationPdf.js) — staff don't edit them here.
 const emptyNotes = { customer: '' };
 
-const loadInitial = () => {
+const emptyState = () => ({ items: [], customer: emptyCustomer, notes: emptyNotes });
+
+const normalise = (parsed) => ({
+  items: Array.isArray(parsed?.items) ? parsed.items : [],
+  customer: { ...emptyCustomer, ...(parsed?.customer || {}) },
+  // Drop any terms / internal comments left over from older saved quotes
+  notes: { customer: parsed?.notes?.customer || '' }
+});
+
+// The draft used to live in localStorage; import it once, then let IndexedDB own it.
+const readLegacyDraft = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { items: [], customer: emptyCustomer, notes: emptyNotes };
+    if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return {
-      items: parsed.items || [],
-      customer: { ...emptyCustomer, ...(parsed.customer || {}) },
-      // Drop any terms / internal comments left over from older saved quotes
-      notes: { customer: parsed.notes?.customer || '' }
-    };
+    localStorage.removeItem(STORAGE_KEY);
+    return normalise(parsed);
   } catch {
-    return { items: [], customer: emptyCustomer, notes: emptyNotes };
+    return null;
   }
 };
 
 export const CollectionProvider = ({ children }) => {
-  const [state, setState] = useState(loadInitial);
+  const [state, setState] = useState(emptyState);
+
+  // Reading IndexedDB is async, so the first render is empty. Until the stored
+  // draft has been read back, persisting would write that empty state over real
+  // work — so the save effect waits for this flag.
+  const hydrated = useRef(false);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // Quota exceeded — almost always an oversized custom-item photo. Never let
-      // this throw: an error here unmounts the whole app and the staff member
-      // loses the quote they were building. Retry without the inline photos so
-      // at least the line items, customer and notes survive a reload.
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          ...state,
-          items: state.items.map(i => ({
-            ...i,
-            image:         String(i.image || '').startsWith('data:')         ? '' : i.image,
-            materialImage: String(i.materialImage || '').startsWith('data:') ? '' : i.materialImage
-          }))
-        }));
-      } catch { /* keep the collection in memory for this session only */ }
-    }
+    let alive = true;
+    (async () => {
+      let draft = null;
+      try { draft = (await idbGet(STORE_KV, DRAFT_KEY))?.value || null; } catch { /* fall through */ }
+      if (!draft) draft = readLegacyDraft();
+      if (alive && draft) setState(normalise(draft));
+      if (alive) hydrated.current = true;
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    idbPut(STORE_KV, { key: DRAFT_KEY, value: state }).catch(() => { /* keep going in memory */ });
   }, [state]);
 
   const addItem = (product) => {

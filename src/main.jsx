@@ -9,6 +9,7 @@ import { ProductsProvider } from './context/ProductsContext.jsx';
 import { WishlistProvider } from './context/WishlistContext.jsx';
 import { CompareProvider } from './context/CompareContext.jsx';
 import { CollectionProvider } from './context/CollectionContext.jsx';
+import { registerServiceWorker, watchConnectivity, requestPersistentStorage } from './lib/registerSW.js';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -29,3 +30,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </HashRouter>
   </React.StrictMode>,
 )
+
+registerServiceWorker();
+watchConnectivity();
+requestPersistentStorage();
