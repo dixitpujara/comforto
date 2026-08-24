@@ -175,6 +175,12 @@
 .ctable-img {
   width: 60px;
   height: 60px;
+  /* The global `img { max-width: 100% }` lets this collapse with its cell. On a
+     phone the table is wider than the screen, the browser gives the thumbnail
+     column whatever is left, and the photo was squashed to 2px wide — present,
+     but invisible. A min-width wins over max-width, so it keeps its size and the
+     table scrolls instead. */
+  min-width: 60px;
   object-fit: cover;
   border-radius: var(--radius-md);
   background: var(--color-bg-alt);
@@ -303,6 +309,7 @@
 .mat-swatch {
   width: 60px;
   height: 60px;
+  min-width: 60px;            /* same collapse guard as .ctable-img */
   object-fit: cover;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-accent-soft);
