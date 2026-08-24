@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ImageOff } from 'lucide-react';
+import { forgetCachedImage } from '../lib/registerSW';
 import '../assets/css/SafeImage.css';
 
 /**
@@ -45,7 +46,12 @@ const SafeImage = ({
       className={className}
       loading={loading}
       style={style}
-      onError={() => setErrored(true)}
+      onError={() => {
+        setErrored(true);
+        // The offline cache can't tell a dead URL from a real photo (opaque
+        // responses report no status), so evict anything that won't decode.
+        forgetCachedImage(src);
+      }}
       {...rest}
     />
   );

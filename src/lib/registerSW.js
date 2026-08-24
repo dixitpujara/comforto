@@ -33,6 +33,25 @@ export async function requestPersistentStorage() {
   }
 }
 
+const IMAGE_CACHE = 'comforto-images';
+
+/**
+ * Drop a photo from the cache.
+ *
+ * Cross-origin image responses are opaque, which means status 0 whether the CDN
+ * answered 200 or 404 — the service worker cannot tell them apart and will
+ * happily store a dead URL as though it were a picture, forever. The page can
+ * tell, because it knows whether the image decoded, so undecodable entries are
+ * evicted from here.
+ */
+export async function forgetCachedImage(url) {
+  try {
+    if (!('caches' in window) || !url) return;
+    const cache = await caches.open(IMAGE_CACHE);
+    await cache.delete(url, { ignoreVary: true });
+  } catch { /* nothing to clean up */ }
+}
+
 /**
  * Pull product photos into the cache while there's a connection. They're hosted
  * off-site, so without this the catalog loses its pictures the moment the site
@@ -52,7 +71,8 @@ export async function warmImageCache(urls) {
   // catalog will make later.
   const load = (url) => new Promise(resolve => {
     const img = new Image();
-    img.onload = img.onerror = () => resolve();
+    img.onload  = () => resolve(true);
+    img.onerror = () => resolve(false);
     img.src = url;
   });
 
@@ -60,9 +80,11 @@ export async function warmImageCache(urls) {
   // whatever the staff member is actually doing.
   for (const url of unique) {
     try {
-      if (await caches.match(url, { ignoreVary: true, cacheName: 'comforto-images' })) continue;
-      await load(url);
-      warmed++;
+      if (await caches.match(url, { ignoreVary: true, cacheName: IMAGE_CACHE })) continue;
+      // A dead URL still gets cached by the worker as an opaque response. If it
+      // won't decode, take it back out rather than keeping a permanent blank.
+      if (await load(url)) warmed++;
+      else await forgetCachedImage(url);
       await new Promise(r => setTimeout(r, 60));
     } catch { /* one missing photo doesn't matter */ }
   }
