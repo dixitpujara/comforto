@@ -13,6 +13,10 @@ const COMPANY = {
   gst: '24AAOFC2033P1ZA'
 };
 
+// Height reserved at the bottom of every page for the footer band: the hairline
+// sits 52pt up, the page number 18pt up. Nothing may be drawn inside this strip.
+const FOOTER_SPACE = 72;
+
 // Fixed company terms printed on every quotation — not editable by staff.
 const STANDARD_TERMS = [
   '50% advance with order; balance before delivery.',
@@ -317,7 +321,15 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {}, q
   autoTable(doc, {
     startY: y,
     head, body,
-    margin: { left: margin, right: margin },
+    // Without an explicit bottom margin autoTable keeps its 40pt default, which
+    // reaches into the footer band — rows on a full page printed on top of the
+    // company details. Reserve the footer's height instead.
+    margin: { left: margin, right: margin, bottom: FOOTER_SPACE },
+    // Never divide a line item across pages. The default ('auto') splits a row
+    // that only partly fits, which left an item's name and price on one page and
+    // its remarks stranded on the next with no number, photo or amount beside
+    // them. A little whitespace at the foot of a page is the better trade.
+    rowPageBreak: 'avoid',
     theme: 'striped',
     styles: {
       font: 'helvetica',
@@ -387,7 +399,7 @@ export async function buildQuotationPdf({ items, customer, notes, totals = {}, q
 
   // ─── PAGE-BREAK GUARD ─────────────────────────────────────────
   const ensureSpace = (need) => {
-    if (y + need > pageH - 70) { doc.addPage(); y = margin + 20; }
+    if (y + need > pageH - FOOTER_SPACE) { doc.addPage(); y = margin + 20; }
   };
 
   // ─── TOTALS CARD ──────────────────────────────────────────────

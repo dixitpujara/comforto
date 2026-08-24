@@ -144,3 +144,16 @@
   transform: scale(1.2);
   border-color: var(--color-accent);
 }
+
+/* Cards are square, so in the two-column grid below ~400px the image area drops
+   to about 158px — shorter than the 155px column of four stacked icons, which
+   then ran past the bottom and was clipped by the wrap's overflow:hidden. The
+   last action (Share) simply vanished. Two-by-two keeps every icon on the card
+   at full 34px touch size. */
+@media (max-width: 400px) {
+  .pcard-hover-actions {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 0.35rem;
+  }
+}

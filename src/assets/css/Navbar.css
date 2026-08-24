@@ -397,14 +397,20 @@
 }
 .navbar-mobile-user svg { color: var(--color-accent-dark); }
 
-@media (max-width: 1024px) {
+/* Measured: the logo (200) + six category links (474) + action icons (447) +
+   two 28px gaps need 1177px of container, and .container caps at 1240px. The
+   drawer used to take over only below 900px, so from 900–1240px the links were
+   squashed under the action icons — they overflowed their flex container
+   silently instead of wrapping, so nothing looked broken until you read the
+   text. Anything narrower than the container's full width gets the drawer. */
+@media (max-width: 1240px) {
   .navbar-username { display: none; }
-}
-@media (max-width: 900px) {
   .navbar-links { display: none; }
   .navbar-actions { display: none; }
   .navbar-toggle { display: inline-flex; }
   .navbar-mobile { display: flex; }
   .navbar-inner { gap: 1rem; justify-content: space-between; }
+}
+@media (max-width: 900px) {
   .navbar-logo { width: 170px; }
 }
