@@ -361,6 +361,11 @@
 
 .ctable-input {
   width: 100%;
+  /* width:100% lets the field shrink with its column, and on a phone the
+     squeezed table gave Rate 56px — a 35px box holding "105000". A floor keeps
+     a six-figure amount readable; the wrapper scrolls sideways as it already
+     did. */
+  min-width: 100px;
   font-family: inherit;
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--color-border);
@@ -437,17 +442,21 @@
 /* ---------- Totals ---------- */
 .totals-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  /* minmax(0, …) not 1fr: a plain fr track refuses to shrink below its content's
+     min-content width, and the 140px label + an input's default width pushed
+     this to 360px on a 320px phone — clipped, unreachable, no scrollbar. */
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 2rem;
   align-items: flex-start;
 }
 .totals-adjust { display: flex; flex-direction: column; gap: 0.85rem; }
 .totals-adjust label {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 140px minmax(0, 1fr);
   align-items: center;
   gap: 0.75rem;
 }
+.totals-adjust input { min-width: 0; }
 .totals-adjust label > span {
   font-size: 0.78rem;
   font-weight: 600;
@@ -638,7 +647,17 @@
 .action-bar .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 @media (max-width: 1024px) {
-  .totals-grid { grid-template-columns: 1fr; }
+  .totals-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  /* No room for a 140px label beside the field — stack them. */
+  .totals-adjust label { grid-template-columns: 1fr; gap: 0.3rem; }
+
+  /* Finger-sized targets on the two controls staff tap repeatedly. The qty
+     steppers were 30x32 and the quote Open buttons 59x31 — workable with a
+     mouse, fiddly on a phone. */
+  .qty-stepper button { width: 40px; height: 40px; }
+  .qh-actions .btn-small { min-height: 40px; padding-inline: 0.9rem; }
 }
 @media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr; }
