@@ -61,16 +61,30 @@ export const CollectionProvider = ({ children }) => {
   // Reading IndexedDB is async, so the first render is empty. Until the stored
   // draft has been read back, persisting would write that empty state over real
   // work — so the save effect waits for this flag.
+  //
+  // Crucially it is only set once a read *succeeds*. A read that fails tells us
+  // nothing about what is stored, and treating that as "no draft" is how a
+  // half-finished quote got wiped by the next keystroke.
   const hydrated = useRef(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      let draft = null;
-      try { draft = (await idbGet(STORE_KV, DRAFT_KEY))?.value || null; } catch { /* fall through */ }
-      if (!draft) draft = readLegacyDraft();
-      if (alive && draft) setState(normalise(draft));
-      if (alive) hydrated.current = true;
+      for (let attempt = 0; attempt < 3 && alive; attempt++) {
+        try {
+          const stored = (await idbGet(STORE_KV, DRAFT_KEY))?.value || null;
+          const draft = stored || readLegacyDraft();
+          if (!alive) return;
+          if (draft) setState(normalise(draft));
+          hydrated.current = true;      // the store answered — safe to save from here
+          return;
+        } catch {
+          // Transient (blocked open, aborted transaction). Wait and ask again.
+          await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
+        }
+      }
+      // Still no answer: keep the quote in memory for this session rather than
+      // risk writing a blank over whatever is actually stored.
     })();
     return () => { alive = false; };
   }, []);

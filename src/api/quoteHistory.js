@@ -140,21 +140,19 @@ export async function syncQuotes() {
   try {
     const index = await apiGet('/api/quotes');
     if (Array.isArray(index)) {
-      const local = await localQuotes();
-      const localById = new Map(local.map(q => [q.id, q]));
-      const queued = new Set(((await idbGetAll(STORE_OUTBOX)) || []).map(e => e.record?.id || e.id));
+      const localById = new Map((await localQuotes()).map(q => [q.id, q]));
 
       // Pull down records this device has never seen. Summaries are enough for
       // the list; the full record is fetched on demand when a quote is opened.
       for (const summary of index) {
         if (!localById.has(summary.id)) await idbPut(STORE_QUOTES, { ...summary, partial: true });
       }
-      // Drop local copies the server no longer has — unless we're still holding
-      // an unsent write for them.
-      const serverIds = new Set(index.map(q => q.id));
-      for (const q of local) {
-        if (!serverIds.has(q.id) && !queued.has(q.id)) await idbDelete(STORE_QUOTES, q.id);
-      }
+      // Deliberately additive: a quote missing from the server index is NOT
+      // deleted here. "Absent from the index" and "the index came back empty or
+      // partial" are indistinguishable — a fresh store, a transient 200 with no
+      // body, another staff account — and treating them the same wipes quotes
+      // that exist only on this device. Deletions travel the other way, as an
+      // explicit outbox op. Old records are retired by trimLocal on recency.
       setSync({ shared: true, reason: 'ok', pending: await pendingCount() });
     }
   } catch (e) {

@@ -94,22 +94,21 @@ const Collection = () => {
     }
   };
 
-  // Delivery is always ahead of the quote — the picker starts at tomorrow, and
-  // the guard catches dates typed straight into the field.
+  // Delivery is always ahead of the quote; the picker starts at tomorrow.
   const minDeliveryDate = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
 
-  const onDeliveryDate = (e) => {
-    const value = e.target.value;
-    if (value && value < minDeliveryDate) {
-      alert('Please choose a future delivery date.');
-      return;
-    }
-    updateCustomer({ deliveryDate: value });
-  };
+  // Never interrupt the picker. iOS fires a change event for every position of
+  // the date wheels, so rejecting a value here popped an alert the moment the
+  // picker opened — before anyone had chosen anything. Take whatever the field
+  // gives us and let the field's own styling and the action bar report a date
+  // that is in the past.
+  const onDeliveryDate = (e) => updateCustomer({ deliveryDate: e.target.value });
+
+  const deliveryInPast = Boolean(customer.deliveryDate) && customer.deliveryDate < minDeliveryDate;
 
   const submitCustom = () => {
     if (!custom.name.trim()) { alert('Please enter an item name.'); return; }
@@ -181,6 +180,7 @@ const Collection = () => {
     items.length > 0 &&
     customer.name.trim().length > 0 &&
     Boolean(customer.deliveryDate) &&
+    !deliveryInPast &&
     unpricedCount === 0;
 
   // Nothing added yet needs no warning — the buttons are disabled and the empty
@@ -190,6 +190,7 @@ const Collection = () => {
     : !customer.name.trim()     ? 'Customer name required'
     : unpricedCount             ? `Enter a price for ${unpricedCount} item${unpricedCount > 1 ? 's' : ''}`
     : !customer.deliveryDate    ? 'Delivery date required'
+    : deliveryInPast            ? 'Delivery date must be in the future'
     : '';
 
   // Record this quote in the history after it goes out. A reopened quote
@@ -680,7 +681,8 @@ const Collection = () => {
                 <input type="text" value={customer.interior} onChange={(e) => updateCustomer({ interior: e.target.value })} placeholder="Interior designer / firm name" />
               </Field>
               <Field label="Expected delivery *">
-                <input type="date" value={customer.deliveryDate} min={minDeliveryDate} onChange={onDeliveryDate} />
+                <input type="date" value={customer.deliveryDate} min={minDeliveryDate} onChange={onDeliveryDate}
+                  className={deliveryInPast ? 'is-invalid' : ''} />
               </Field>
               <Field label="Delivery address" full>
                 <textarea rows={2} value={customer.deliveryAddress} onChange={(e) => updateCustomer({ deliveryAddress: e.target.value })} placeholder="Site address (if different from billing)" />

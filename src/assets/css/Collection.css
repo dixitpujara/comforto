@@ -289,8 +289,10 @@
   text-decoration: underline;
 }
 
-/* A line still missing its price — blocks the quote from being generated */
-.ctable-input.is-invalid {
+/* A line still missing its price, or a delivery date in the past — either way
+   the quote can't be generated, so flag the field rather than interrupting. */
+.ctable-input.is-invalid,
+.form-field input.is-invalid {
   border-color: var(--color-danger);
   background: rgba(192, 57, 43, 0.04);
 }

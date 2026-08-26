@@ -29,6 +29,9 @@ const KEEP = new Set([SHELL_CACHE, ASSET_CACHE, IMAGE_CACHE]);
 
 const MAX_IMAGES = 400;
 
+// How long a navigation waits for the network before the cached shell is used.
+const NAV_TIMEOUT = 3500;
+
 const BASE = new URL('./', self.location).pathname;   // '/' or '/comforto/'
 const SHELL_URL = BASE;                               // index.html for this scope
 
@@ -116,9 +119,15 @@ self.addEventListener('fetch', (event) => {
 
   // Navigations: try the network so a new deploy is picked up, fall back to the
   // cached shell when there's nothing to talk to.
+  //
+  // The network gets a short deadline rather than an open-ended wait. A refused
+  // connection fails immediately, but a server that is merely unreachable — a
+  // captive portal, a dropping mobile signal, DNS hanging — can leave the
+  // request pending for half a minute, during which the app appears dead even
+  // though a perfectly good copy is sitting in the cache.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetchWithTimeout(request, NAV_TIMEOUT)
         .then(response => {
           const copy = response.clone();
           caches.open(SHELL_CACHE).then(c => c.put(SHELL_URL, copy)).catch(() => {});

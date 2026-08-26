@@ -29,21 +29,35 @@ const openDB = () => {
   if (useShim) return Promise.reject(new Error('IndexedDB unavailable'));
   if (dbPromise) return dbPromise;
 
-  dbPromise = new Promise((resolve, reject) => {
+  const createStores = (db) => {
+    if (!db.objectStoreNames.contains(STORE_QUOTES)) db.createObjectStore(STORE_QUOTES, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORE_KV))     db.createObjectStore(STORE_KV,     { keyPath: 'key' });
+    if (!db.objectStoreNames.contains(STORE_OUTBOX)) db.createObjectStore(STORE_OUTBOX, { keyPath: 'seq', autoIncrement: true });
+  };
+  const hasAllStores = (db) =>
+    [STORE_QUOTES, STORE_KV, STORE_OUTBOX].every(n => db.objectStoreNames.contains(n));
+
+  const attempt = (version) => new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') { reject(new Error('No IndexedDB')); return; }
     let request;
-    try { request = indexedDB.open(DB_NAME, DB_VERSION); }
+    try { request = version ? indexedDB.open(DB_NAME, version) : indexedDB.open(DB_NAME); }
     catch (e) { reject(e); return; }
 
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_QUOTES)) db.createObjectStore(STORE_QUOTES, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(STORE_KV))     db.createObjectStore(STORE_KV,     { keyPath: 'key' });
-      if (!db.objectStoreNames.contains(STORE_OUTBOX)) db.createObjectStore(STORE_OUTBOX, { keyPath: 'seq', autoIncrement: true });
-    };
+    request.onupgradeneeded = () => createStores(request.result);
     request.onsuccess = () => resolve(request.result);
     request.onerror   = () => reject(request.error || new Error('IndexedDB open failed'));
     request.onblocked = () => reject(new Error('IndexedDB blocked'));
+  });
+
+  dbPromise = attempt(DB_VERSION).then(db => {
+    // A database can exist at the right version yet be missing its stores — for
+    // instance if something opened `comforto` without an upgrade handler and
+    // created an empty one first. Every read then fails forever. Bump the
+    // version once to force an upgrade and build the stores.
+    if (hasAllStores(db)) return db;
+    const next = db.version + 1;
+    db.close();
+    return attempt(next);
   }).catch(err => {
     useShim = true;
     dbPromise = null;
@@ -100,21 +114,32 @@ const shim = {
 };
 
 // ── Public API ────────────────────────────────────────────────────────
+//
+// The shim stands in only when IndexedDB is genuinely unavailable. A *transient*
+// failure on a working database — a blocked open, an aborted transaction — is
+// rethrown rather than answered from the empty shim, because callers cannot
+// otherwise tell "nothing is stored" from "I could not read it", and acting on
+// the wrong one overwrites real work with a blank.
+const orShim = (attempt, viaShim) =>
+  attempt().catch(err => {
+    if (useShim) return viaShim();
+    throw err;
+  });
 
 export const idbGetAll = (store) =>
-  run(store, 'readonly', s => s.getAll()).catch(() => shim.getAll(store));
+  orShim(() => run(store, 'readonly', s => s.getAll()), () => shim.getAll(store));
 
 export const idbGet = (store, key) =>
-  run(store, 'readonly', s => s.get(key)).catch(() => shim.get(store, key));
+  orShim(() => run(store, 'readonly', s => s.get(key)), () => shim.get(store, key));
 
 export const idbPut = (store, value) =>
-  run(store, 'readwrite', s => s.put(value)).then(() => value).catch(() => shim.put(store, value));
+  orShim(() => run(store, 'readwrite', s => s.put(value)).then(() => value), () => shim.put(store, value));
 
 export const idbDelete = (store, key) =>
-  run(store, 'readwrite', s => s.delete(key)).catch(() => shim.del(store, key));
+  orShim(() => run(store, 'readwrite', s => s.delete(key)), () => shim.del(store, key));
 
 export const idbClear = (store) =>
-  run(store, 'readwrite', s => s.clear()).catch(() => shim.clear(store));
+  orShim(() => run(store, 'readwrite', s => s.clear()), () => shim.clear(store));
 
 /** True when real IndexedDB is in use (false once the shim has taken over). */
 export const idbAvailable = async () => {
