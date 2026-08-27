@@ -107,7 +107,10 @@ ul {
 .container {
   max-width: 1240px;
   margin: 0 auto;
-  padding: 0 1.5rem;
+  /* max() keeps the normal 1.5rem gutter, and widens it only where a notch or
+     rounded corner would otherwise clip content — landscape on a notched device.
+     Both insets are 0 in a browser tab. */
+  padding: 0 max(1.5rem, env(safe-area-inset-right, 0px)) 0 max(1.5rem, env(safe-area-inset-left, 0px));
 }
 
 .text-center { text-align: center; }

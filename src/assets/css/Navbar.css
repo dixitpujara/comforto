@@ -2,6 +2,10 @@
   position: sticky;
   top: 0;
   z-index: 50;
+  /* Installed on iOS the page can extend into the status bar area. The inset is
+     0 in a normal browser tab, so this costs nothing there and keeps the header
+     clear of the clock and icons in the standalone app. */
+  padding-top: env(safe-area-inset-top, 0px);
   background: rgba(245, 238, 227, 0.92);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);

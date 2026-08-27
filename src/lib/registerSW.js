@@ -5,6 +5,32 @@
 
 import { flushOutbox, syncQuotes } from '../api/quoteHistory';
 
+// Reload to pick up a new build, but never yank the page away mid-edit. The
+// collection draft is written to IndexedDB continuously; a half-typed field or
+// an open dialog is not, so wait for the user to be between things.
+//
+// Polled rather than event-driven on purpose: waiting for a blur that may never
+// come would leave the device on the stale build indefinitely, which is the
+// exact failure this is here to prevent. The cap is the backstop.
+const RELOAD_POLL_MS = 2000;
+const RELOAD_MAX_WAIT_MS = 120_000;
+
+const reloadWhenIdle = () => {
+  const busy = () => {
+    const el = document.activeElement;
+    return Boolean(document.querySelector('.ci-modal')) ||
+      Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'));
+  };
+  if (!busy()) { window.location.reload(); return; }
+
+  const startedAt = Date.now();
+  const timer = setInterval(() => {
+    if (busy() && Date.now() - startedAt < RELOAD_MAX_WAIT_MS) return;
+    clearInterval(timer);
+    window.location.reload();
+  }, RELOAD_POLL_MS);
+};
+
 export function registerServiceWorker() {
   if (!import.meta.env.PROD) return;
   if (!('serviceWorker' in navigator)) return;
@@ -13,7 +39,32 @@ export function registerServiceWorker() {
     const base = import.meta.env.BASE_URL || '/';
     navigator.serviceWorker
       .register(`${base}sw.js`, { scope: base })
+      .then(reg => {
+        if (!reg) return;
+        // An installed app can sit on a stale bundle indefinitely: it rarely
+        // performs a real navigation, and iOS is not diligent about checking.
+        // Ask for a new worker whenever the app is brought to the foreground.
+        let lastCheck = 0;
+        const checkForUpdate = () => {
+          const now = Date.now();
+          if (document.visibilityState !== 'visible' || now - lastCheck < 60_000) return;
+          lastCheck = now;
+          reg.update().catch(() => {});
+        };
+        document.addEventListener('visibilitychange', checkForUpdate);
+        checkForUpdate();
+      })
       .catch(() => { /* unsupported or blocked — the app still works online */ });
+
+    // The new worker calls skipWaiting() and claims clients, so it takes charge
+    // as soon as it installs — but this page keeps executing the old bundle
+    // until it reloads. Without this, fixes appear not to have shipped.
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading) return;
+      reloading = true;
+      reloadWhenIdle();
+    });
   });
 }
 

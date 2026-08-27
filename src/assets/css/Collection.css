@@ -573,7 +573,8 @@
 /* ---------- Action bar ---------- */
 .action-bar {
   position: sticky;
-  bottom: 1rem;
+  /* Clear the iPhone home indicator when installed; the inset is 0 elsewhere. */
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   background: var(--color-text-primary);
   color: #fff;
   border-radius: var(--radius-pill);
