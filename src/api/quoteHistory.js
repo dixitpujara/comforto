@@ -10,7 +10,7 @@
 // Records carry inline photos and run to a few hundred KB, so the list must
 // never carry them.
 
-import { apiGet, apiPost, apiDelete, ApiUnavailable, ApiError } from './client';
+import { apiGet, apiPost, apiDelete, getToken, ApiUnavailable, ApiError } from './client';
 import { idbGetAll, idbGet, idbPut, idbDelete, STORE_QUOTES, STORE_OUTBOX } from '../lib/idb';
 
 const LEGACY_KEY = 'comforto_quotes_v1';
@@ -96,9 +96,19 @@ const pendingCount = async () => (await idbGetAll(STORE_OUTBOX) || []).length;
 
 let flushing = null;
 
+// A refusal the server will give every time, no matter how often we retry: the
+// payload is wrong, the record is gone, or it is too big. Retrying such an entry
+// forever would wedge the queue and block every write behind it — including
+// deletions. 401 is excluded: signing in again fixes it. So are 408/429, which
+// are explicitly "try later".
+const isPermanentRejection = (e) =>
+  e instanceof ApiError && e.status >= 400 && e.status < 500 &&
+  ![401, 408, 429].includes(e.status);
+
 /**
- * Replay queued writes against the API, oldest first. Stops at the first
- * failure so ordering is preserved and nothing is dropped. Safe to call often.
+ * Replay queued writes against the API, oldest first. A transient failure stops
+ * the run so ordering is preserved and nothing is lost; an entry the server will
+ * never accept is discarded so it cannot block the rest of the queue.
  */
 export async function flushOutbox() {
   if (flushing) return flushing;
@@ -111,6 +121,10 @@ export async function flushOutbox() {
         await idbDelete(STORE_OUTBOX, entry.seq);
         setSync({ shared: true, reason: 'ok' });
       } catch (e) {
+        if (isPermanentRejection(e)) {
+          await idbDelete(STORE_OUTBOX, entry.seq);   // unsendable — drop and carry on
+          continue;
+        }
         noteFailure(e);
         break;                       // still offline / still refused — try again later
       }
@@ -135,17 +149,36 @@ export async function listQuotes() {
  */
 export async function syncQuotes() {
   await migrateLegacy();
+
+  // Signing in while the API was unreachable takes the offline credential path,
+  // which sets no token. The user looks signed in, every request 401s, and this
+  // device quietly keeps a private list for ever — the usual reason a phone and
+  // a tablet disagree about which quotes exist. Say so up front instead of
+  // discovering it through a failed request.
+  if (!getToken()) {
+    setSync({ shared: false, reason: 'signin', pending: await pendingCount() });
+    return (await localQuotes()).slice(0, MAX_QUOTES).map(summarize);
+  }
+
   await flushOutbox();
 
   try {
     const index = await apiGet('/api/quotes');
     if (Array.isArray(index)) {
       const localById = new Map((await localQuotes()).map(q => [q.id, q]));
+      // Quotes with an unsent write of their own. A deletion made offline is
+      // absent locally but still present in the server index, so without this
+      // the pull below would treat it as new and put it straight back — the
+      // delete silently undoing itself on the next sync.
+      const pending = new Set(((await idbGetAll(STORE_OUTBOX)) || [])
+        .map(e => e.record?.id || e.id).filter(Boolean));
 
       // Pull down records this device has never seen. Summaries are enough for
       // the list; the full record is fetched on demand when a quote is opened.
       for (const summary of index) {
-        if (!localById.has(summary.id)) await idbPut(STORE_QUOTES, { ...summary, partial: true });
+        if (!localById.has(summary.id) && !pending.has(summary.id)) {
+          await idbPut(STORE_QUOTES, { ...summary, partial: true });
+        }
       }
       // Deliberately additive: a quote missing from the server index is NOT
       // deleted here. "Absent from the index" and "the index came back empty or
