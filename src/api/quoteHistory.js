@@ -22,6 +22,11 @@ export const MAX_QUOTES = 25;
 export const formatQuoteNo = (quoteNo, revision) =>
   Number(revision) > 1 ? `${quoteNo}-R${revision}` : quoteNo;
 
+// Idempotent on purpose. A quote pulled from another device is stored as a
+// summary — no `customer` object, no `items` array — and then read back through
+// here on every list render. Looking only at q.customer.name emptied the name,
+// project and item count of every quote that originated elsewhere, which is why
+// some rows showed a bare dash.
 export const summarize = (q) => ({
   id: q.id,
   quoteNo: q.quoteNo,
@@ -29,9 +34,9 @@ export const summarize = (q) => ({
   printedNo: q.printedNo || q.quoteNo,
   savedAt: q.savedAt,
   grandTotal: Number(q.grandTotal) || 0,
-  customerName: q.customer?.name || '',
-  projectName: q.customer?.projectName || '',
-  itemCount: Array.isArray(q.items) ? q.items.length : 0,
+  customerName: q.customer?.name || q.customerName || '',
+  projectName: q.customer?.projectName || q.projectName || '',
+  itemCount: Array.isArray(q.items) ? q.items.length : (Number(q.itemCount) || 0),
 });
 
 const byNewest = (a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''));
