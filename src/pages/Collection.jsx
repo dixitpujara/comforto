@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus } from 'lucide-react';
+import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus, RefreshCw } from 'lucide-react';
 import { useCollection } from '../context/CollectionContext';
 import { downloadQuotationPdf, quotationPdfFile, newQuoteNo } from '../utils/quotationPdf';
 import { apiPost } from '../api/client';
@@ -136,8 +136,31 @@ const Collection = () => {
   const [draft, setDraft]     = useState(newDraft);
   const [history, setHistory] = useState([]);
   const [sync, setSync]       = useState({ shared: false, reason: 'unknown', pending: 0 });
+  // One inline confirmation at a time: { kind: 'delete'|'open', id } or
+  // { kind: 'clear' }. Never window.confirm(): in an installed iOS web app the
+  // native dialog is deferred until the next touch, so the action seemed to
+  // fire only when the user tapped something else afterwards.
+  const [confirming, setConfirming] = useState(null);
+  const confirmingDelete = confirming?.kind === 'delete' ? confirming.id : null;
+  const setConfirmingDelete = (id) => setConfirming(id ? { kind: 'delete', id } : null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncedAt, setSyncedAt] = useState(null);
 
   const applyHistory = (list) => { setHistory(list); setSync({ ...getSyncState() }); };
+
+  // Sync is otherwise pull-only, on load and on refocus, so a quote saved on one
+  // device shows up on another only when that one is reopened. This lets staff
+  // ask for it on the spot — it pushes anything queued and pulls everyone else's.
+  const runSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      applyHistory(await syncQuotes());
+      setSyncedAt(new Date());
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -146,7 +169,7 @@ const Collection = () => {
       // reconcile with the shared store in the background.
       applyHistory(await listQuotes());
       const merged = await syncQuotes();
-      if (alive) applyHistory(merged);
+      if (alive) { applyHistory(merged); if (getSyncState().shared) setSyncedAt(new Date()); }
     })();
     // The outbox can drain later (reconnect, tab refocus) — follow along.
     const off = onSyncChange(s => { if (alive) setSync({ ...s }); });
@@ -156,14 +179,16 @@ const Collection = () => {
   // An empty list looks the same whether nothing is saved or this device can't
   // reach the shared store — so say which it is.
   const pending = Number(sync.pending) || 0;
+  // Only conditions that need a person to do something get the red banner.
+  // Being offline isn't one — the app is built for it, saves locally, and
+  // uploads on its own when the connection returns — so it is not announced.
+  // Anything still waiting to upload is counted quietly in the hint instead.
   const syncNote =
     sync.reason === 'unknown' ? ''
     : sync.reason === 'signin' ? 'Not syncing — sign out and sign in again to share quotes with other devices.'
-    : sync.reason === 'offline'
-      ? `Offline — quotes are saved on this device${pending ? ` (${pending} waiting to sync)` : ''} and upload when you reconnect.`
-    : !sync.shared ? 'Not syncing — the shared store could not be reached.'
-    : pending ? `${pending} quote${pending > 1 ? 's' : ''} waiting to sync.`
+    : sync.reason === 'error'  ? 'Not syncing — the shared store could not be reached.'
     : '';
+  const syncOk = sync.shared && !pending && !syncing;
 
   const displayQuoteNo = draft.quoteNo ? formatQuoteNo(draft.quoteNo, draft.revision) : '';
 
@@ -230,8 +255,9 @@ const Collection = () => {
 
   // The list holds summaries only (full records carry photos), so fetch the
   // quote itself before loading it into the builder.
-  const openQuote = async (summary) => {
-    if (items.length && !confirm('Replace what you are working on with this saved quote?')) return;
+  const openQuote = async (summary, { confirmed = false } = {}) => {
+    if (items.length && !confirmed) { setConfirming({ kind: 'open', id: summary.id }); return; }
+    setConfirming(null);
     let record;
     try {
       record = await getQuote(summary.id);
@@ -250,8 +276,11 @@ const Collection = () => {
     document.querySelector('.collection-head')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  // Confirmed inline on the row rather than with window.confirm(): native
+  // dialogs are unreliable in an installed iOS web app, and when one fails to
+  // appear the tap does nothing at all with no way to tell why.
   const removeQuote = async (record) => {
-    if (!confirm(`Delete saved quote ${formatQuoteNo(record.quoteNo, record.revision)}?`)) return;
+    setConfirmingDelete(null);
     try {
       applyHistory(await deleteQuote(record.id));
       if (draft.id === record.id) setDraft(d => ({ ...d, id: null }));
@@ -434,7 +463,11 @@ const Collection = () => {
     <div className="collection container animate-fade-in">
       {/* Saved quotes come first: reopening an existing job is the usual reason
           to land here, and building a new one continues below. */}
-      {(history.length > 0 || syncNote) && (
+      {/* Always rendered: the sync status has to be visible even when the list is
+          empty, otherwise "working fine, nothing here" and "not syncing" look
+          identical — and the device that can't upload is never the one where
+          you're waiting for quotes to appear. */}
+      {(
         <section className="qh-section">
           <header className="qh-head">
             <span className="eyebrow">Recent quotes</span>
@@ -442,6 +475,10 @@ const Collection = () => {
               {history.length > 0
                 ? `Open one to update it · last ${Math.min(history.length, MAX_QUOTES)}`
                 : 'No saved quotes yet'}
+              {syncOk && (syncedAt
+                ? ` · synced with other devices ${syncedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+                : ' · synced with other devices')}
+              {pending > 0 && !syncing && ` · ${pending} waiting to sync`}
             </span>
           </header>
           {syncNote && <p className="qh-warn">{syncNote}</p>}
@@ -459,10 +496,26 @@ const Collection = () => {
                   <span className="qh-count">{q.itemCount} items</span>
                 </div>
                 <div className="qh-actions">
-                  <button className="btn btn-ghost btn-small" onClick={() => openQuote(q)}>Open</button>
-                  <button className="row-remove" onClick={() => removeQuote(q)} title="Delete saved quote">
-                    <Trash2 size={14} />
-                  </button>
+                  {confirmingDelete === q.id ? (
+                    <>
+                      <span className="qh-confirm">Delete?</span>
+                      <button className="btn btn-danger btn-small" onClick={() => removeQuote(q)}>Yes</button>
+                      <button className="btn btn-ghost btn-small" onClick={() => setConfirmingDelete(null)}>No</button>
+                    </>
+                  ) : confirming?.kind === 'open' && confirming.id === q.id ? (
+                    <>
+                      <span className="qh-confirm">Replace current work?</span>
+                      <button className="btn btn-danger btn-small" onClick={() => openQuote(q, { confirmed: true })}>Yes</button>
+                      <button className="btn btn-ghost btn-small" onClick={() => setConfirming(null)}>No</button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="btn btn-ghost btn-small" onClick={() => openQuote(q)}>Open</button>
+                      <button className="row-remove" onClick={() => setConfirmingDelete(q.id)} title="Delete saved quote">
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </li>
             ))}
@@ -480,14 +533,26 @@ const Collection = () => {
           <button className="btn btn-primary" onClick={() => setCustomOpen(true)}>
             <Plus size={16} /> Add custom item
           </button>
-          {items.length > 0 && (
-            <button className="btn btn-ghost" onClick={() => {
-              if (!confirm('Clear collection and customer info?')) return;
-              clearCollection();
-              // Start a genuinely new quote, not another revision of the last one.
-              setDraft(newDraft());
-              setGeneratedQuote(null);
-            }}>
+          <button className="btn btn-ghost" onClick={runSync} disabled={syncing}
+            title="Push anything saved here and pull quotes from other devices">
+            <RefreshCw size={16} className={syncing ? 'is-spinning' : ''} />
+            {syncing ? 'Syncing…' : 'Sync'}
+          </button>
+          {items.length > 0 && confirming?.kind === 'clear' && (
+            <>
+              <span className="qh-confirm">Clear everything?</span>
+              <button className="btn btn-danger" onClick={() => {
+                setConfirming(null);
+                clearCollection();
+                // Start a genuinely new quote, not another revision of the last one.
+                setDraft(newDraft());
+                setGeneratedQuote(null);
+              }}>Yes</button>
+              <button className="btn btn-ghost" onClick={() => setConfirming(null)}>No</button>
+            </>
+          )}
+          {items.length > 0 && confirming?.kind !== 'clear' && (
+            <button className="btn btn-ghost" onClick={() => setConfirming({ kind: 'clear' })}>
               <Trash2 size={16} /> Clear all
             </button>
           )}
