@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus, RefreshCw, Loader2 } from 'lucide-react';
+import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus, RefreshCw, Loader2, X } from 'lucide-react';
 import { useCollection } from '../context/CollectionContext';
 import { downloadQuotationPdf, quotationPdfFile, newQuoteNo } from '../utils/quotationPdf';
 import { apiPost } from '../api/client';
@@ -67,28 +68,30 @@ const Collection = () => {
     }
   };
 
-  // ── Material swatch (per line item) ──────────────────────────────
-  // One hidden file input shared by every row; materialTargetRef remembers
-  // which line the staff member tapped. Swatches are small on the page and in
-  // the PDF, so 700px is plenty and keeps the stored quote light.
-  const materialFileRef   = useRef(null);
-  const materialTargetRef = useRef(null);
+  // ── Per-row photos (product image and material swatch) ───────────
+  // One hidden file input shared by every row; photoTargetRef remembers which
+  // line and which field the staff member tapped. The product photo prints at
+  // thumbnail size in the PDF so 1200px is ample; swatches are smaller still.
+  const materialFileRef = useRef(null);
+  const photoTargetRef  = useRef(null);      // { itemId, field: 'image' | 'materialImage' }
+  const PHOTO_MAX_DIM   = { image: MAX_PHOTO_DIM, materialImage: 700 };
 
-  const pickMaterial = (itemId) => {
-    materialTargetRef.current = itemId;
+  const pickPhoto = (itemId, field) => {
+    photoTargetRef.current = { itemId, field };
     materialFileRef.current?.click();
   };
+  const pickMaterial = (itemId) => pickPhoto(itemId, 'materialImage');
 
-  const onMaterialPhoto = async (e) => {
+  const onItemPhoto = async (e) => {
     const file = e.target.files?.[0];
-    const itemId = materialTargetRef.current;
+    const target = photoTargetRef.current;
     e.target.value = '';
-    materialTargetRef.current = null;
-    if (!file || !itemId) return;
+    photoTargetRef.current = null;
+    if (!file || !target) return;
     if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
     try {
-      const materialImage = await readPhotoAsDataUrl(file, 700);
-      updateItem(itemId, { materialImage });
+      const dataUrl = await readPhotoAsDataUrl(file, PHOTO_MAX_DIM[target.field] || MAX_PHOTO_DIM);
+      updateItem(target.itemId, { [target.field]: dataUrl });
     } catch {
       alert('Could not read that photo. Please try another one.');
     }
@@ -157,6 +160,15 @@ const Collection = () => {
   const setConfirmingDelete = (id) => setConfirming(id ? { kind: 'delete', id } : null);
   const [syncing, setSyncing] = useState(false);
   const [openingId, setOpeningId] = useState(null);   // quote being fetched for Open
+
+  // Full-size view of a product photo or material swatch — { src, alt } or null.
+  const [lightbox, setLightbox] = useState(null);
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e) => { if (e.key === 'Escape') setLightbox(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
   const [syncedAt, setSyncedAt] = useState(null);
 
   const applyHistory = (list) => { setHistory(list); setSync({ ...getSyncState() }); };
@@ -591,7 +603,22 @@ const Collection = () => {
         </div>
       </div>
 
-      {customOpen && (
+      {/* Both overlays are portalled to <body>. The page root carries an
+          animate-fade-in whose fill mode leaves a transform in place, and a
+          transformed ancestor becomes the containing block for position:fixed —
+          so rendered in place, a "full-screen" backdrop covered only the page
+          section and its close button sat off-screen. */}
+      {lightbox && createPortal(
+        <div className="lb-backdrop" onClick={() => setLightbox(null)} role="dialog" aria-modal="true" aria-label={lightbox.alt}>
+          <button type="button" className="lb-close" onClick={() => setLightbox(null)} aria-label="Close">
+            <X size={20} />
+          </button>
+          <img src={lightbox.src} alt={lightbox.alt} className="lb-img" onClick={e => e.stopPropagation()} />
+        </div>,
+        document.body
+      )}
+
+      {customOpen && createPortal(
         <div className="ci-modal-backdrop" onClick={() => setCustomOpen(false)}>
           <div className="ci-modal" onClick={e => e.stopPropagation()}>
             <h3 className="ci-modal-title">Add custom item</h3>
@@ -621,7 +648,8 @@ const Collection = () => {
               <button className="btn btn-primary" onClick={submitCustom}>Add to collection</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* The form always renders — a quote can be built entirely from custom
@@ -662,16 +690,42 @@ const Collection = () => {
                     return (
                       <tr key={it.id}>
                         <td><span className="ctable-num">{String(idx + 1).padStart(2, '0')}</span></td>
-                        <td><SafeImage src={it.image} alt={it.name} className="ctable-img compact" /></td>
+                        <td>
+                          {it.image ? (
+                            <div className="mat-cell">
+                              <SafeImage src={it.image} alt={it.name} className="ctable-img compact is-zoomable"
+                                onClick={() => setLightbox({ src: it.image, alt: it.name })} title="View photo" />
+                              <div className="mat-actions">
+                                <button type="button" className="mat-clear" onClick={() => pickPhoto(it.id, 'image')} title="Change product photo">
+                                  Change
+                                </button>
+                                <button type="button" className="mat-clear"
+                                  onClick={() => updateItem(it.id, { image: '' })} title="Remove product photo">
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" className="mat-add" onClick={() => pickPhoto(it.id, 'image')}>
+                              <ImagePlus size={14} />
+                              <span>Add</span>
+                            </button>
+                          )}
+                        </td>
                         <td>
                           {it.materialImage ? (
                             <div className="mat-cell">
-                              <img src={it.materialImage} alt={`${it.name} material`} className="mat-swatch"
-                                onClick={() => pickMaterial(it.id)} title="Change material photo" />
-                              <button type="button" className="mat-clear"
-                                onClick={() => updateItem(it.id, { materialImage: '' })} title="Remove material photo">
-                                Remove
-                              </button>
+                              <img src={it.materialImage} alt={`${it.name} material`} className="mat-swatch is-zoomable"
+                                onClick={() => setLightbox({ src: it.materialImage, alt: `${it.name} — material` })} title="View material photo" />
+                              <div className="mat-actions">
+                                <button type="button" className="mat-clear" onClick={() => pickMaterial(it.id)} title="Change material photo">
+                                  Change
+                                </button>
+                                <button type="button" className="mat-clear"
+                                  onClick={() => updateItem(it.id, { materialImage: '' })} title="Remove material photo">
+                                  Remove
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <button type="button" className="mat-add" onClick={() => pickMaterial(it.id)}>
@@ -715,7 +769,7 @@ const Collection = () => {
                 </tbody>
               </table>
             </div>
-            <input ref={materialFileRef} type="file" accept="image/*" hidden onChange={onMaterialPhoto} />
+            <input ref={materialFileRef} type="file" accept="image/*" hidden onChange={onItemPhoto} />
           </section>
 
           {/* TOTALS + ADJUSTMENTS */}

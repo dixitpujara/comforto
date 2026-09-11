@@ -336,6 +336,7 @@
   transition: border-color var(--transition-fast);
 }
 .mat-swatch:hover { border-color: var(--color-accent); }
+.mat-actions { display: flex; gap: 0.6rem; }
 .mat-clear {
   font-size: 0.68rem;
   letter-spacing: 0.04em;
@@ -695,3 +696,49 @@
 @keyframes qh-spin { to { transform: rotate(360deg); } }
 .is-spinning { animation: qh-spin 900ms linear infinite; }
 @media (prefers-reduced-motion: reduce) { .is-spinning { animation: none; } }
+
+/* ---------- Image lightbox ----------
+   Tapping a product thumbnail or material swatch shows it full-size. Closes on
+   the button, on the backdrop, or with Escape. Insets keep the close button
+   clear of the status bar and rounded corners in the installed app. */
+.is-zoomable { cursor: zoom-in; }
+.lb-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(20, 18, 15, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  cursor: zoom-out;
+  animation: lb-fade 160ms ease-out;
+}
+.lb-img {
+  max-width: min(92vw, 1100px);
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+.lb-close {
+  position: fixed;
+  top: calc(1rem + env(safe-area-inset-top, 0px));
+  right: calc(1rem + env(safe-area-inset-right, 0px));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--color-text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}
+.lb-close:hover { background: #fff; }
+@keyframes lb-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .lb-backdrop { animation: none; } }
