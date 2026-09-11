@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus, RefreshCw } from 'lucide-react';
+import { Trash2, Download, MessageCircle, Mail, FileText, Plus, Minus, ImagePlus, RefreshCw, Loader2 } from 'lucide-react';
 import { useCollection } from '../context/CollectionContext';
 import { downloadQuotationPdf, quotationPdfFile, newQuoteNo } from '../utils/quotationPdf';
 import { apiPost } from '../api/client';
@@ -95,11 +95,15 @@ const Collection = () => {
   };
 
   // Delivery is always ahead of the quote; the picker starts at tomorrow.
-  const minDeliveryDate = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }, []);
+  //
+  // Recomputed every render, not memoised at mount: an installed app stays open
+  // for days without remounting, and a "tomorrow" frozen at load drifts into
+  // the past overnight — so a date that was fine yesterday flags as invalid
+  // today, or one that is now past slips through. Cheap enough to do each time.
+  const toISODate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const minDeliveryDate = toISODate(tomorrow);
 
   // Never interrupt the picker. iOS fires a change event for every position of
   // the date wheels, so rejecting a value here popped an alert the moment the
@@ -107,6 +111,14 @@ const Collection = () => {
   // gives us and let the field's own styling and the action bar report a date
   // that is in the past.
   const onDeliveryDate = (e) => updateCustomer({ deliveryDate: e.target.value });
+
+  // iOS opens the wheel on an empty field but commits nothing if Done is tapped
+  // without scrolling, leaving "Delivery date required" in place while the
+  // staff member is sure they picked one. Start an empty field at the earliest
+  // valid date, so tapping Done is itself a valid choice.
+  const onDeliveryFocus = () => {
+    if (!customer.deliveryDate) updateCustomer({ deliveryDate: minDeliveryDate });
+  };
 
   const deliveryInPast = Boolean(customer.deliveryDate) && customer.deliveryDate < minDeliveryDate;
 
@@ -144,6 +156,7 @@ const Collection = () => {
   const confirmingDelete = confirming?.kind === 'delete' ? confirming.id : null;
   const setConfirmingDelete = (id) => setConfirming(id ? { kind: 'delete', id } : null);
   const [syncing, setSyncing] = useState(false);
+  const [openingId, setOpeningId] = useState(null);   // quote being fetched for Open
   const [syncedAt, setSyncedAt] = useState(null);
 
   const applyHistory = (list) => { setHistory(list); setSync({ ...getSyncState() }); };
@@ -257,14 +270,27 @@ const Collection = () => {
   // quote itself before loading it into the builder.
   const openQuote = async (summary, { confirmed = false } = {}) => {
     if (items.length && !confirmed) { setConfirming({ kind: 'open', id: summary.id }); return; }
+    if (openingId) return;                    // one at a time
     setConfirming(null);
+    // A quote that came from another device is held as a summary and fetched in
+    // full here — a network round trip, so show that something is happening.
+    setOpeningId(summary.id);
     let record;
     try {
       record = await getQuote(summary.id);
     } catch {
       record = null;
+    } finally {
+      setOpeningId(null);
     }
-    if (!record) { alert('Could not open that quote. Please try again.'); return; }
+    // A summary can't be opened — it has no items or customer details. That's
+    // what comes back when the full record is on the server and unreachable.
+    if (!record || record.partial) {
+      alert(record?.partial
+        ? 'This quote was saved on another device and needs a connection to load. Please try again when online.'
+        : 'Could not open that quote. Please try again.');
+      return;
+    }
 
     loadCollection(record);
     setDiscount(Number(record.totals?.discount) || 0);
@@ -510,8 +536,14 @@ const Collection = () => {
                     </>
                   ) : (
                     <>
-                      <button className="btn btn-ghost btn-small" onClick={() => openQuote(q)}>Open</button>
-                      <button className="row-remove" onClick={() => setConfirmingDelete(q.id)} title="Delete saved quote">
+                      <button className="btn btn-ghost btn-small" onClick={() => openQuote(q)}
+                        disabled={Boolean(openingId)} aria-busy={openingId === q.id}>
+                        {openingId === q.id
+                          ? <><Loader2 size={14} className="is-spinning" /> Opening…</>
+                          : 'Open'}
+                      </button>
+                      <button className="row-remove" onClick={() => setConfirmingDelete(q.id)}
+                        title="Delete saved quote" disabled={Boolean(openingId)}>
                         <Trash2 size={14} />
                       </button>
                     </>
@@ -746,7 +778,8 @@ const Collection = () => {
                 <input type="text" value={customer.interior} onChange={(e) => updateCustomer({ interior: e.target.value })} placeholder="Interior designer / firm name" />
               </Field>
               <Field label="Expected delivery *">
-                <input type="date" value={customer.deliveryDate} min={minDeliveryDate} onChange={onDeliveryDate}
+                <input type="date" value={customer.deliveryDate} min={minDeliveryDate}
+                  onChange={onDeliveryDate} onFocus={onDeliveryFocus}
                   className={deliveryInPast ? 'is-invalid' : ''} />
               </Field>
               <Field label="Delivery address" full>
