@@ -160,6 +160,10 @@ const Collection = () => {
   const setConfirmingDelete = (id) => setConfirming(id ? { kind: 'delete', id } : null);
   const [syncing, setSyncing] = useState(false);
   const [openingId, setOpeningId] = useState(null);   // quote being fetched for Open
+  // Why the last Open or Delete on the list didn't go through, shown inline
+  // beside the list. Not alert(): in the installed iOS app a native dialog
+  // waits for the next touch, so a failed tap looked like nothing happened.
+  const [listNote, setListNote] = useState('');
 
   // Full-size view of a product photo or material swatch — { src, alt } or null.
   const [lightbox, setLightbox] = useState(null);
@@ -284,6 +288,7 @@ const Collection = () => {
     if (items.length && !confirmed) { setConfirming({ kind: 'open', id: summary.id }); return; }
     if (openingId) return;                    // one at a time
     setConfirming(null);
+    setListNote('');
     // A quote that came from another device is held as a summary and fetched in
     // full here — a network round trip, so show that something is happening.
     setOpeningId(summary.id);
@@ -298,7 +303,7 @@ const Collection = () => {
     // A summary can't be opened — it has no items or customer details. That's
     // what comes back when the full record is on the server and unreachable.
     if (!record || record.partial) {
-      alert(record?.partial
+      setListNote(record?.partial
         ? 'This quote was saved on another device and needs a connection to load. Please try again when online.'
         : 'Could not open that quote. Please try again.');
       return;
@@ -319,11 +324,12 @@ const Collection = () => {
   // appear the tap does nothing at all with no way to tell why.
   const removeQuote = async (record) => {
     setConfirmingDelete(null);
+    setListNote('');
     try {
       applyHistory(await deleteQuote(record.id));
       if (draft.id === record.id) setDraft(d => ({ ...d, id: null }));
     } catch {
-      alert('Could not delete that quote. Please try again.');
+      setListNote('Could not delete that quote. Please try again.');
     }
   };
 
@@ -520,6 +526,7 @@ const Collection = () => {
             </span>
           </header>
           {syncNote && <p className="qh-warn">{syncNote}</p>}
+          {listNote && <p className="qh-warn" role="alert">{listNote}</p>}
           <ul className="qh-list">
             {history.map(q => (
               <li key={q.id} className={`qh-row${draft.id === q.id ? ' is-active' : ''}`}>

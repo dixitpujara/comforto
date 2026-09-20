@@ -66,7 +66,22 @@ const noteFailure = (e) => {
 
 // ── Local working copy ────────────────────────────────────────────────
 
-const localQuotes = async () => (await idbGetAll(STORE_QUOTES) || []).sort(byNewest);
+// Every full record this device holds, keyed by id, refreshed on each list read.
+// The list is built from a full read of the store anyway, so keeping the records
+// costs nothing extra — and it lets Open answer from memory. That matters in the
+// installed iOS app, where a tap's IndexedDB round trip has been seen to stall
+// after the app comes back from the background, leaving "Open" spinning until
+// the next tap woke the page up.
+const memory = new Map();
+
+const remember = (records) => {
+  memory.clear();
+  for (const q of records) if (q?.id) memory.set(q.id, q);
+  return records;
+};
+
+const localQuotes = async () =>
+  remember((await idbGetAll(STORE_QUOTES) || []).sort(byNewest));
 
 // One-time import of quotes saved before IndexedDB, so nobody loses their
 // history when this version lands.
@@ -204,16 +219,24 @@ export async function syncQuotes() {
 
 /** The full record for one quote, or null. */
 export async function getQuote(id) {
-  const local = await idbGet(STORE_QUOTES, id);
-  if (local && !local.partial) return local;
+  const held = memory.get(id);
+  if (held && !held.partial) return held;
+
+  let local = null;
+  try { local = await idbGet(STORE_QUOTES, id); } catch { /* fall through to the API */ }
+  if (local && !local.partial) { memory.set(id, local); return local; }
 
   try {
     const record = await apiGet(`/api/quotes?id=${encodeURIComponent(id)}`);
-    if (record) { await idbPut(STORE_QUOTES, record); setSync({ shared: true, reason: 'ok' }); }
+    if (record) {
+      memory.set(id, record);
+      await idbPut(STORE_QUOTES, record).catch(() => {});   // held in memory regardless
+      setSync({ shared: true, reason: 'ok' });
+    }
     return record;
   } catch (e) {
     noteFailure(e);
-    return local || null;            // a summary is better than nothing
+    return local || held || null;    // a summary is better than nothing
   }
 }
 
@@ -222,6 +245,7 @@ export async function getQuote(id) {
  * connection — then queued for the shared store.
  */
 export async function saveQuote(record) {
+  memory.set(record.id, record);
   await idbPut(STORE_QUOTES, record);
   await queue({ op: 'save', record });
   await trimLocal();
@@ -231,6 +255,7 @@ export async function saveQuote(record) {
 }
 
 export async function deleteQuote(id) {
+  memory.delete(id);
   await idbDelete(STORE_QUOTES, id);
   await queue({ op: 'delete', id });
   setSync({ pending: await pendingCount() });

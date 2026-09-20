@@ -49,37 +49,66 @@ const openDB = () => {
     request.onblocked = () => reject(new Error('IndexedDB blocked'));
   });
 
-  dbPromise = attempt(DB_VERSION).then(db => {
+  // The browser can close this connection behind our back — iOS does it when an
+  // installed app has sat in the background for a while. Forget the dead handle
+  // so the next call opens a fresh one instead of failing on it for ever.
+  const watch = (db) => {
+    db.onclose = () => { if (dbPromise === thisOpen) dbPromise = null; };
+    db.onversionchange = () => { db.close(); if (dbPromise === thisOpen) dbPromise = null; };
+    return db;
+  };
+
+  const thisOpen = attempt(DB_VERSION).then(db => {
     // A database can exist at the right version yet be missing its stores — for
     // instance if something opened `comforto` without an upgrade handler and
     // created an empty one first. Every read then fails forever. Bump the
     // version once to force an upgrade and build the stores.
-    if (hasAllStores(db)) return db;
+    if (hasAllStores(db)) return watch(db);
     const next = db.version + 1;
     db.close();
-    return attempt(next);
+    return attempt(next).then(watch);
   }).catch(err => {
-    useShim = true;
-    dbPromise = null;
+    // Only a failure to *open* at all means IndexedDB is off the table.
+    if (dbPromise === thisOpen) { useShim = true; dbPromise = null; }
     throw err;
   });
+  dbPromise = thisOpen;
 
   return dbPromise;
 };
 
-const run = (storeName, mode, fn) =>
+// A transaction that never completes is as bad as one that fails — worse, in
+// fact, because the caller waits for ever. Safari has been seen to leave a
+// request dangling after the app comes back from the background; when that
+// happens, give up on this connection and let the next call reopen it.
+const TX_TIMEOUT_MS = 8000;
+
+const runOnce = (storeName, mode, fn) =>
   openDB().then(db => new Promise((resolve, reject) => {
-    const tx = tx0(db, storeName, mode, reject);
-    if (!tx) return;
+    let tx;
+    try { tx = db.transaction(storeName, mode); }
+    catch (e) { reject(e); return; }
+
+    const timer = setTimeout(() => {
+      dbPromise = null;                  // presumed stuck — reopen next time
+      try { tx.abort(); } catch { /* already gone */ }
+      reject(new Error('IndexedDB transaction timed out'));
+    }, TX_TIMEOUT_MS);
+
     const request = fn(tx.objectStore(storeName));
-    tx.oncomplete = () => resolve(request ? request.result : undefined);
-    tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
+    tx.oncomplete = () => { clearTimeout(timer); resolve(request ? request.result : undefined); };
+    tx.onabort = tx.onerror = () => { clearTimeout(timer); reject(tx.error || new Error('IndexedDB transaction failed')); };
   }));
 
-const tx0 = (db, storeName, mode, reject) => {
-  try { return db.transaction(storeName, mode); }
-  catch (e) { reject(e); return null; }
-};
+// `transaction()` throws InvalidStateError on a connection the browser has
+// closed. That is not a broken database, just a stale handle: drop it and try
+// once more on a fresh connection before reporting a failure.
+const run = (storeName, mode, fn) =>
+  runOnce(storeName, mode, fn).catch(err => {
+    if (useShim || err?.name !== 'InvalidStateError') throw err;
+    dbPromise = null;
+    return runOnce(storeName, mode, fn);
+  });
 
 // ── localStorage shim, same five operations ───────────────────────────
 
