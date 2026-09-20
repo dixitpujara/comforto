@@ -1,5 +1,5 @@
-self.__PRECACHE__ = ["assets/html2canvas.esm-CBrSDip1.js","assets/index-1CIrjsoB.js","assets/index-DTYMrP8G.css","assets/index.es-DVKv-2if.js","assets/purify.es-BaNf_EpD.js","favicon.svg","icon-maskable.svg","icons.svg","manifest.webmanifest"];
-self.__BUILD_ID__ = "fa56c6ed";
+self.__PRECACHE__ = ["assets/html2canvas.esm-CBrSDip1.js","assets/index-CyoPW5EL.js","assets/index-DTYMrP8G.css","assets/index.es-D9-z3FXt.js","assets/purify.es-BaNf_EpD.js","favicon.svg","icon-maskable.svg","icons.svg","manifest.webmanifest"];
+self.__BUILD_ID__ = "e7c794ed";
 /* Comforto service worker — offline-first app shell.
  *
  * Strategy per request type:
